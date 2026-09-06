@@ -34,6 +34,12 @@ public class WalletAccountEntity {
     @DecimalMin("0.00")
     private BigDecimal balance;
 
+    @Column(name = "pending_balance", nullable = false, precision = 14, scale = 2)
+    private BigDecimal pendingBalance = BigDecimal.ZERO;
+
+    @Column(name = "withdrawal_reserved", nullable = false, precision = 14, scale = 2)
+    private BigDecimal withdrawalReserved = BigDecimal.ZERO;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

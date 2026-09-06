@@ -52,4 +52,6 @@ public class UserEntity {
         this.passwordHash = passwordHash;
         this.displayName = displayName;
     }
+
+    public void changeStatus(UserStatus status) { this.status = status; }
 }

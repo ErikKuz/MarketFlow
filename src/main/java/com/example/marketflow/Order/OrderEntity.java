@@ -6,8 +6,8 @@ import java.time.Instant;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import com.example.marketflow.payment.PaymentStatus;
 import com.example.marketflow.exception.InvalidOrderStateException;
+import com.example.marketflow.payment.PaymentStatus;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -55,6 +55,37 @@ public class OrderEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "payment_expires_at")
+    private Instant paymentExpiresAt;
+
+    @Column(name = "commission_rate", nullable = false, precision = 5, scale = 4)
+    private BigDecimal commissionRate = new BigDecimal("0.10");
+
+    @Column(name = "delivered_at")
+    private Instant deliveredAt;
+
+    @Column(name = "return_deadline")
+    private Instant returnDeadline;
+
+    @Column(name = "funds_released", nullable = false)
+    private boolean fundsReleased;
+
+    public void configurePayment(Instant expiresAt, BigDecimal rate) {
+        this.paymentExpiresAt = expiresAt;
+        this.commissionRate = rate;
+    }
+
+    public boolean paymentExpired(Instant now) {
+        return paymentExpiresAt != null && !now.isBefore(paymentExpiresAt);
+    }
+
+    public void recordDelivery(Instant deliveredAt, Instant returnDeadline) {
+        this.deliveredAt = deliveredAt;
+        this.returnDeadline = returnDeadline;
+    }
+
+    public void releaseFunds() { this.fundsReleased = true; }
+
     public OrderEntity(
             Long buyerId,
             OrderStatus status,
@@ -87,7 +118,7 @@ public class OrderEntity {
         this.paymentStatus = paymentStatus;
     }
 
-    private boolean isAllowedOrderTransition(
+    private boolean isAllowedOrderTransition(//просто проверяем что next допустимый статус
             OrderStatus current,
             OrderStatus next
     ) {
@@ -105,7 +136,7 @@ public class OrderEntity {
         };
     }
 
-    private boolean isAllowedPaymentTransition(
+    private boolean isAllowedPaymentTransition(//просто проверяем что next допустимый статус
             PaymentStatus current,
             PaymentStatus next
     ) {

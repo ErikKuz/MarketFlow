@@ -12,7 +12,8 @@ import org.springframework.stereotype.Repository;
 import com.example.marketflow.products.ProductEntity;
 
 @Repository
-public interface ProductRepository extends JpaRepository<ProductEntity,Long>{
+public interface ProductRepository extends JpaRepository<ProductEntity,Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<ProductEntity>{
+    @Query("select p from ProductEntity p where p.active = true and p.hidden = false and p.quantity > :quantity")
     List<ProductEntity> findAllByActiveTrueAndQuantityGreaterThan(Integer quantity);
     List<ProductEntity> findAllBySellerId(Long sellerId);
     Optional<ProductEntity> findByIdAndSellerId(Long productId,Long sellerId);
@@ -22,6 +23,7 @@ public interface ProductRepository extends JpaRepository<ProductEntity,Long>{
             SET quantity = quantity - :requestedQuantity
             WHERE id = :productId
             AND active = TRUE
+            AND hidden = FALSE
             AND quantity >= :requestedQuantity
             """, nativeQuery = true)
     int decreaseStock(

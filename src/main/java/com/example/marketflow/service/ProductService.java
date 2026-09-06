@@ -32,7 +32,7 @@ public class ProductService {
         ProductEntity product = rep.findById(id)
                 .orElseThrow(() -> new ProductNotFoundException(id));
 
-        if (!Boolean.TRUE.equals(product.getActive())
+        if (!Boolean.TRUE.equals(product.getActive()) || product.isHidden()
                 || product.getQuantity() == null
                 || product.getQuantity() <= 0) {
             throw new ProductUnavailableException();

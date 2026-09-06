@@ -13,12 +13,16 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -57,6 +61,12 @@ class PaymentServiceTest {
 
     @Mock
     private WalletAccountRepository walletAccountRepository;
+
+    @Mock
+    private com.example.marketflow.marketplace.OrderWorkflowService workflow;
+
+    @Spy
+    private Clock clock = Clock.fixed(Instant.parse("2026-09-06T10:00:00Z"), ZoneOffset.UTC);
 
     @InjectMocks
     private PaymentService paymentService;
@@ -179,13 +189,13 @@ class PaymentServiceTest {
                 )
         );
         when(orderItemRepository.findAllByOrderId(42L)).thenReturn(items);
-        when(walletAccountRepository.increaseBalance(5L, new BigDecimal("54.00")))
+        when(walletAccountRepository.increasePendingBalance(5L, new BigDecimal("54.00")))
                 .thenReturn(1);
-        when(walletAccountRepository.increaseBalance(6L, new BigDecimal("36.00")))
+        when(walletAccountRepository.increasePendingBalance(6L, new BigDecimal("36.00")))
                 .thenReturn(1);
         when(walletAccountRepository.findOwnerAccount())
                 .thenReturn(Optional.of(new WalletAccountEntity(99L)));
-        when(walletAccountRepository.increaseBalance(99L, new BigDecimal("10.00")))
+        when(walletAccountRepository.increasePendingBalance(99L, new BigDecimal("10.00")))
                 .thenReturn(1);
 
         Long result = paymentService.payOrder(
@@ -200,9 +210,10 @@ class PaymentServiceTest {
                 7L,
                 new BigDecimal("100.00")
         );
-        verify(walletAccountRepository).increaseBalance(5L, new BigDecimal("54.00"));
-        verify(walletAccountRepository).increaseBalance(6L, new BigDecimal("36.00"));
-        verify(walletAccountRepository).increaseBalance(99L, new BigDecimal("10.00"));
+        verify(walletAccountRepository).increasePendingBalance(5L, new BigDecimal("54.00"));
+        verify(walletAccountRepository).increasePendingBalance(6L, new BigDecimal("36.00"));
+        verify(walletAccountRepository).increasePendingBalance(99L, new BigDecimal("10.00"));
+        verify(walletAccountRepository, never()).increaseBalance(any(), any());
         verify(order).changePaymentStatus(PaymentStatus.PROCESSING);
         verify(order).changePaymentStatus(PaymentStatus.PAID);
         verify(order).changeStatus(OrderStatus.CONFIRMED);
@@ -223,6 +234,10 @@ class PaymentServiceTest {
                 .findFirst()
                 .orElseThrow();
         assertEquals(99L, commission.getUserId());
+        assertTrue(commission.isPending());
+        assertTrue(transactions.stream()
+                .filter(item -> item.getType() == TransactionType.SELLER_PAYOUT)
+                .allMatch(PaymentTransactionEntity::isPending));
         assertEquals(0, new BigDecimal("10.00").compareTo(commission.getAmount()));
         PaymentTransactionEntity payment = transactions.stream()
                 .filter(item -> item.getType() == TransactionType.PAYMENT)
@@ -298,6 +313,7 @@ class PaymentServiceTest {
         when(order.getTotalPrice()).thenReturn(new BigDecimal("100.00"));
         when(order.getStatus()).thenReturn(OrderStatus.CREATED);
         when(order.getPaymentStatus()).thenReturn(PaymentStatus.NOT_PAID);
+        when(order.getCommissionRate()).thenReturn(new BigDecimal("0.10"));
         return order;
     }
 

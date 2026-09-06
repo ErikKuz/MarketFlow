@@ -1,0 +1,18 @@
+<!DOCTYPE html><html lang="ru" xmlns:th="http://www.thymeleaf.org"><head th:replace="~{workspace/fragments :: head('Аналитика продаж')}"></head>
+<body><nav th:replace="~{workspace/fragments :: nav}"></nav><main class="workspace"><h1>Аналитика продаж</h1>
+<form th:action="@{/workspace/analytics}" method="get" class="panel">
+<label>С даты (включительно, UTC)<input type="date" name="from" th:value="${from}" required></label>
+<label>До даты (не включительно, UTC)<input type="date" name="to" th:value="${to}" required></label><button>Показать</button></form>
+<p class="muted">Платежи и обратные операции учитываются по дате каждой операции. Возврат в следующем месяце уменьшит комиссию следующего месяца. Популярность показывает исходные оплаченные покупки.</p>
+<div class="grid"><section class="card"><h3>Создано заказов</h3><p class="metric" th:text="${report.ordersCreated}"></p></section>
+<section class="card"><h3>Оплачено</h3><p class="metric" th:text="${report.ordersPaid}"></p></section>
+<section class="card"><h3>Отменено</h3><p class="metric" th:text="${report.ordersCancelled}"></p></section>
+<section class="card"><h3>Возвращено</h3><p class="metric" th:text="${report.ordersRefunded}"></p></section>
+<section class="card"><h3>Сумма оплат</h3><p class="metric" th:text="${report.paymentsReceived + ' ₽'}"></p></section>
+<section class="card"><h3>Сумма возвратов</h3><p class="metric" th:text="${report.refunded + ' ₽'}"></p></section>
+<section class="card"><h3>Начислено комиссии</h3><p class="metric" th:text="${report.commissionEarned + ' ₽'}"></p></section>
+<section class="card"><h3>Возвращено комиссии</h3><p class="metric" th:text="${report.commissionReversed + ' ₽'}"></p></section>
+<section class="card"><h3>Комиссия за вычетом возвратов</h3><p class="metric" th:text="${report.netCommission + ' ₽'}"></p></section></div>
+<h2>Популярные товары</h2><div class="table-scroll"><table><thead><tr><th>Товар</th><th>Количество</th><th>Сумма исходных покупок</th></tr></thead>
+<tbody><tr th:each="p : ${report.popularProducts}"><td th:text="${p.name}"></td><td th:text="${p.quantity}"></td><td th:text="${p.grossSales + ' ₽'}"></td></tr>
+<tr th:if="${report.popularProducts.isEmpty()}"><td colspan="3">За выбранный период нет оплат.</td></tr></tbody></table></div></main></body></html>

@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head(title)"><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title th:text="${title + ' | MarketFlow'}">MarketFlow</title><link rel="stylesheet" th:href="@{/css/workspace.css}"></head>
+<body>
+<nav th:fragment="nav" class="nav"><a th:href="@{/workspace}" class="brand">MarketFlow</a><a th:href="@{/catalog}">Каталог</a>
+<a th:href="@{/account/orders}">Мои заказы</a><a th:href="@{/workspace/finance}">Мои операции</a><a th:href="@{/workspace}">Кабинеты</a></nav>
+<div th:fragment="pager(page, base)" class="pager">
+<a th:if="${page.page > 0}" th:href="@{${base}(page=${page.page - 1})}">← Предыдущая</a>
+<span th:text="${'Страница ' + (page.page + 1) + ' · Всего записей: ' + page.totalElements}"></span>
+<a th:if="${page.page + 1 < page.totalPages}" th:href="@{${base}(page=${page.page + 1})}">Следующая →</a></div>
+<div th:fragment="audit(events)" class="table-scroll"><table><thead><tr><th>Время UTC</th><th>Кто (ID)</th><th>Событие</th><th>Было → стало</th><th>Описание</th></tr></thead>
+<tbody><tr th:each="e : ${events}"><td th:text="${e.createdAt}"></td><td th:text="${e.actorId == null ? 'Система' : e.actorId}"></td>
+<td th:text="${e.action}"></td><td><span th:text="${e.previousStatus}"></span> → <span th:text="${e.nextStatus}"></span></td><td th:text="${e.detail}"></td></tr>
+<tr th:if="${#lists.isEmpty(events)}"><td colspan="5">Событий пока нет.</td></tr></tbody></table></div>
+</body></html>

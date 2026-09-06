@@ -49,6 +49,9 @@ public class ProductEntity {
     @Column
     private Boolean active;
 
+    @Column(nullable = false)
+    private boolean hidden;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

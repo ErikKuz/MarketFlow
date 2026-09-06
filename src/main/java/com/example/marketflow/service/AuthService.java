@@ -30,6 +30,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final userRoleRepository repository;
     private final WalletAccountRepository WAR;
+    private final com.example.marketflow.marketplace.SellerApplicationRepository sellerApplications;
+    private final java.time.Clock clock;
 
     @Transactional
     public void register(RegisterRequest userDto) {
@@ -49,17 +51,10 @@ public class AuthService {
                 UserMapper.convert(userDto, passwordHash)
         );
 
-        short roleId = switch (userDto.getAccountType()) {
-            case BUYER -> 1;
-            case SELLER -> 2;
-        };
-
-        if (roleId == 2) {
-            repository.save(new UserRolesEntity(savedUser.getId(), (short) 1));
-            WAR.save(new WalletAccountEntity(savedUser.getId()));
+        repository.save(new UserRolesEntity(savedUser.getId(), (short) 1));
+        if (userDto.getAccountType() == com.example.marketflow.AccountType.SELLER) {
+            sellerApplications.save(new com.example.marketflow.marketplace.SellerApplicationEntity(savedUser.getId(), clock.instant()));
         }
-
-        repository.save(new UserRolesEntity(savedUser.getId(), roleId));
     }
 
     @Transactional(readOnly = true)

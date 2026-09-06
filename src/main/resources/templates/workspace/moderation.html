@@ -1,0 +1,20 @@
+<!DOCTYPE html><html lang="ru" xmlns:th="http://www.thymeleaf.org"><head th:replace="~{workspace/fragments :: head('Модерация продавцов и товаров')}"></head>
+<body><nav th:replace="~{workspace/fragments :: nav}"></nav><main class="workspace"><h1>Модерация продавцов и товаров</h1>
+<h2>Заявки и действующие продавцы</h2>
+<section class="panel" th:each="a : ${applications.content}"><h3 th:text="${'Заявка #' + a.id + ' · пользователь #' + a.userId}"></h3>
+<p><b th:text="${a.status}"></b> · <span th:text="${a.reason}"></span></p>
+<form th:if="${a.status.name() == 'PENDING'}" th:action="@{/workspace/moderation/applications/{id}/decision(id=${a.id})}" method="post">
+<label>Решение<select name="approved"><option value="true">Одобрить</option><option value="false">Отклонить</option></select></label>
+<label>Причина<input name="reason" maxlength="1000" required></label><button>Сохранить решение</button></form>
+<form th:if="${a.status.name() == 'ACTIVE' or a.status.name() == 'BLOCKED'}" th:action="@{/workspace/moderation/applications/{id}/block(id=${a.id})}" method="post">
+<input type="hidden" name="blocked" th:value="${a.status.name() == 'ACTIVE'}"><label>Причина<input name="reason" maxlength="1000" required></label>
+<button th:text="${a.status.name() == 'ACTIVE' ? 'Заблокировать продавца' : 'Разблокировать продавца'}"></button></form></section>
+<p th:if="${applications.content.isEmpty()}">Заявок нет.</p>
+<div th:replace="~{workspace/fragments :: pager(${applications}, '/workspace/moderation')}"></div>
+<h2>Видимость товаров</h2><p class="muted">Продавец не может сам снять установленное модератором скрытие. После разблокировки продавца товары открываются отдельно.</p>
+<section class="panel" th:each="p : ${products.content}"><h3 th:text="${'#' + p.id + ' ' + p.name}"></h3>
+<p>Продавец: <span th:text="${p.sellerId}"></span> · <b th:text="${p.hidden ? 'Скрыт модератором' : 'Не скрыт'}"></b></p>
+<form th:action="@{/workspace/moderation/products/{id}/visibility(id=${p.id})}" method="post"><input type="hidden" name="hidden" th:value="${!p.hidden}">
+<label>Причина<input name="reason" maxlength="1000" required></label><button th:text="${p.hidden ? 'Снять скрытие' : 'Скрыть товар'}"></button></form></section>
+<div th:replace="~{workspace/fragments :: pager(${products}, '/workspace/moderation')}"></div>
+<h2>Аудит действий</h2><div th:replace="~{workspace/fragments :: audit(${audit.content})}"></div></main></body></html>

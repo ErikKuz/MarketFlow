@@ -5,6 +5,7 @@ public enum TransactionType {
     SELLER_PAYOUT,
     PLATFORM_COMMISSION,
     REFUND,
-    SELLER_PAYOUT_REVERSAL,
-    PLATFORM_COMMISSION_REVERSAL
+    SELLER_PAYOUT_REVERSAL,//возврат пользователю
+    PLATFORM_COMMISSION_REVERSAL,//возврат пользователю
+    WITHDRAWAL
 }

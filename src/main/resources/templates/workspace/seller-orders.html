@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{workspace/fragments :: head('Входящие заказы продавца')}"></head>
+<body><nav th:replace="~{workspace/fragments :: nav}"></nav>
+<main class="workspace"><h1>Входящие заказы продавца</h1>
+<p class="muted">Здесь показаны только ваши части заказов. Принимать в работу можно оплаченные заказы.</p>
+<div class="table-scroll"><table><thead><tr><th>Часть заказа</th><th>Общий заказ</th><th>Статус</th><th>Сумма</th><th></th></tr></thead>
+<tbody><tr th:each="o : ${orders.content}"><td th:text="${o.id}"></td><td th:text="${o.orderId}"></td><td th:text="${o.status}"></td>
+<td th:text="${o.totalAmount + ' ₽'}"></td><td><a th:href="@{/workspace/seller/orders/{id}(id=${o.id})}">Открыть</a></td></tr>
+<tr th:if="${orders.content.isEmpty()}"><td colspan="5">Входящих заказов пока нет.</td></tr></tbody></table></div>
+<div th:replace="~{workspace/fragments :: pager(${orders}, '/workspace/seller/orders')}"></div></main></body></html>

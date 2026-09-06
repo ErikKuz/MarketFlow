@@ -4,13 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.math.BigDecimal;
-import java.util.List;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -18,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -31,7 +32,8 @@ import com.example.marketflow.User.ShowUserDto;
 import com.example.marketflow.User.UserEntity;
 import com.example.marketflow.exception.EmailAlreadyExistsException;
 import com.example.marketflow.exception.InvalidCredentialsException;
-import com.example.marketflow.payment.WalletAccountEntity;
+import com.example.marketflow.marketplace.SellerApplicationEntity;
+import com.example.marketflow.marketplace.SellerApplicationRepository;
 import com.example.marketflow.userRoles.UserRolesEntity;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,6 +50,12 @@ class AuthServiceTest {
 
     @Mock
     private WalletAccountRepository walletAccountRepository;
+
+    @Mock
+    private SellerApplicationRepository sellerApplications;
+
+    @Spy
+    private Clock clock = Clock.fixed(Instant.parse("2026-09-06T10:00:00Z"), ZoneOffset.UTC);
 
     @InjectMocks
     private AuthService authService;
@@ -81,7 +89,7 @@ class AuthServiceTest {
     }
 
     @Test
-    void registerSellerAssignsBuyerAndSellerRolesAndCreatesWallet() {
+    void registerSellerCreatesPendingApplicationWithoutSellerAccessOrWallet() {
         RegisterRequest request = registerRequest(AccountType.SELLER);
         UserEntity savedUser = org.mockito.Mockito.mock(UserEntity.class);
 
@@ -95,17 +103,15 @@ class AuthServiceTest {
 
         ArgumentCaptor<UserRolesEntity> roleCaptor =
                 ArgumentCaptor.forClass(UserRolesEntity.class);
-        verify(roleRepository, times(2)).save(roleCaptor.capture());
-        List<Short> roleIds = roleCaptor.getAllValues().stream()
-                .map(UserRolesEntity::getRoleId)
-                .toList();
-        assertEquals(List.of((short) 1, (short) 2), roleIds);
-
-        ArgumentCaptor<WalletAccountEntity> walletCaptor =
-                ArgumentCaptor.forClass(WalletAccountEntity.class);
-        verify(walletAccountRepository).save(walletCaptor.capture());
-        assertEquals(7L, walletCaptor.getValue().getUserId());
-        assertEquals(0, BigDecimal.ZERO.compareTo(walletCaptor.getValue().getBalance()));
+        verify(roleRepository).save(roleCaptor.capture());
+        assertEquals((short) 1, roleCaptor.getValue().getRoleId());
+        ArgumentCaptor<SellerApplicationEntity> applicationCaptor =
+                ArgumentCaptor.forClass(SellerApplicationEntity.class);
+        verify(sellerApplications).save(applicationCaptor.capture());
+        assertEquals(7L, applicationCaptor.getValue().getUserId());
+        assertEquals(SellerApplicationEntity.Status.PENDING, applicationCaptor.getValue().getStatus());
+        assertEquals(clock.instant(), applicationCaptor.getValue().getCreatedAt());
+        verifyNoInteractions(walletAccountRepository);
     }
 
     @Test

@@ -8,4 +8,5 @@ import com.example.marketflow.Order.OrderItemEntity;
 
 public interface OrderItemRepository extends JpaRepository<OrderItemEntity, Long> {
     List<OrderItemEntity> findAllByOrderId(Long orderId);
+    List<OrderItemEntity> findAllByOrderIdAndSellerId(Long orderId, Long sellerId);
 }

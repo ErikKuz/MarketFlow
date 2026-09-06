@@ -50,6 +50,9 @@ class OrderServiceTest {
     @Mock
     private PaymentService paymentService;
 
+    @Mock
+    private com.example.marketflow.marketplace.OrderWorkflowService workflow;
+
     @InjectMocks
     private OrderService orderService;
 
@@ -87,6 +90,7 @@ class OrderServiceTest {
         assertEquals(orderId, result);
         verify(productRepository).decreaseStock(productId, 2);
         verify(orderItemRepository).saveAll(anyList());
+        verify(workflow).initialize(org.mockito.ArgumentMatchers.eq(savedOrder), anyList());
         verify(cartItemRepository).deleteSelectedByBuyerId(buyerId);
     }
 
@@ -154,6 +158,7 @@ class OrderServiceTest {
         verify(productRepository).increaseStock(11L, 2);
         verify(order).changeStatus(OrderStatus.CANCELLED);
         verifyNoInteractions(paymentService);
+        verify(workflow).cancelled(order, 7L, "BUYER_CANCELLED");
     }
 
     @Test

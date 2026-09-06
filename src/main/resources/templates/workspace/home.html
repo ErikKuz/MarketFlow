@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{workspace/fragments :: head('Рабочие кабинеты')}"></head>
+<body><nav th:replace="~{workspace/fragments :: nav}"></nav>
+<main class="workspace"><h1>Рабочие кабинеты</h1>
+<p class="muted">Доступные разделы определяются вашими ролями. Платежи и вывод средств используют условные деньги.</p>
+<div class="grid">
+<section class="card" th:if="${buyer}"><h2>Покупатель</h2><p><a th:href="@{/account/orders}">Мои заказы и доставка</a></p>
+<p><a th:href="@{/catalog}">Каталог с поиском</a></p><p><a th:href="@{/account/cart}">Корзина</a></p>
+<p><a th:href="@{/workspace/seller-application}">Заявка на роль продавца</a></p><p><a th:href="@{/account/account/cards}">Условные карты</a></p></section>
+<section class="card" th:if="${seller}"><h2>Продавец</h2><p><a th:href="@{/workspace/seller/orders}">Входящие заказы</a></p><p><a th:href="@{/seller/account}">Мои товары</a></p><p><a th:href="@{/workspace/finance}">Начисления и вывод средств</a></p></section>
+<section class="card" th:if="${moderator}"><h2>Модератор</h2><a th:href="@{/workspace/moderation}">Заявки продавцов и видимость товаров</a></section>
+<section class="card" th:if="${analyst}"><h2>Аналитик</h2><a th:href="@{/workspace/analytics}">Продажи, возвраты и комиссии</a></section>
+<section class="card" th:if="${owner}"><h2>Владелец</h2><a th:href="@{/workspace/owner}">Платформа, сотрудники, выплаты и возвраты</a></section>
+</div></main></body></html>

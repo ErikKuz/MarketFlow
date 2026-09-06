@@ -29,7 +29,7 @@ public class PaymentTransactionEntity {//он фиксирует, что ден�
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "order_id", nullable = false)
+    @Column(name = "order_id")
     private Long orderId;
 
     @Column(name = "user_id", nullable = false)
@@ -52,6 +52,12 @@ public class PaymentTransactionEntity {//он фиксирует, что ден�
 
     @Column(name = "payment_card_id")
     private Long paymentCardId;
+
+    @Column(nullable = false)
+    private boolean pending;
+
+    public PaymentTransactionEntity hold() { pending = true; return this; }
+    public void makeAvailable() { pending = false; }
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -94,5 +100,6 @@ public class PaymentTransactionEntity {//он фиксирует, что ден�
         }
 
         status = TransactionStatus.REFUNDED;
+        pending = false;
     }
 }

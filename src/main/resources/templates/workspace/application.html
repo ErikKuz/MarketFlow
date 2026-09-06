@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{workspace/fragments :: head('Заявка продавца')}"></head>
+<body><nav th:replace="~{workspace/fragments :: nav}"></nav>
+<main class="workspace"><h1>Заявка продавца</h1>
+<p>После одобрения модератором появится кабинет продавца и кошелёк. Повторный вход не требуется.</p>
+<section class="panel" th:if="${sellerApplication != null}"><p>Статус: <b th:text="${sellerApplication.status}"></b></p><p th:text="${sellerApplication.reason}"></p></section>
+<form th:if="${sellerApplication == null or sellerApplication.status.name() == 'REJECTED'}" th:action="@{/workspace/seller-application}" method="post">
+<button>Подать заявку на роль продавца</button></form></main></body></html>

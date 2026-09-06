@@ -47,7 +47,8 @@ public class PaymentService {
     private final PaymentTransactionRepository PTR;
     private final OrderItemRepository OIR;
     private final WalletAccountRepository WAR;
-    private static final BigDecimal PLATFORM_COMMISSION_RATE = new BigDecimal("0.10");
+    private final com.example.marketflow.marketplace.OrderWorkflowService workflow;
+    private final java.time.Clock clock;
 
     @Transactional(readOnly = true)
     public PaymentPageDto getPaymentPage(Long orderId, Long buyerId) {
@@ -98,6 +99,10 @@ public class PaymentService {
             );
         }
 
+        if (order.paymentExpired(clock.instant())) {
+            throw new InvalidOrderStateException("The order payment deadline has expired");
+        }
+
         if (order.getPaymentStatus() == PaymentStatus.NOT_PAID
                 || order.getPaymentStatus() == PaymentStatus.FAILED) {
 
@@ -118,6 +123,7 @@ public class PaymentService {
 
             if (updatedRows != 1) {
                 order.changePaymentStatus(PaymentStatus.FAILED);
+                workflow.record(buyerId, orderId, null, "PAYMENT_FAILED", "PROCESSING", "FAILED", "Insufficient funds");
 
                 PTR.save(
                         new PaymentTransactionEntity(
@@ -161,14 +167,15 @@ public class PaymentService {
             for (Entry<Long, BigDecimal> entry : totalsBySeller.entrySet()) {
 
                 BigDecimal commission = entry.getValue()
-                        .multiply(PLATFORM_COMMISSION_RATE)
+                        .multiply(order.getCommissionRate())
                         .setScale(2, RoundingMode.HALF_UP);
 
                 BigDecimal sellerPayout = entry.getValue().subtract(commission);
 
                 totalCommission = totalCommission.add(commission);
 
-                int updatedWalletRows = WAR.increaseBalance(
+                if (sellerPayout.signum() > 0) {
+                int updatedWalletRows = WAR.increasePendingBalance(
                         entry.getKey(),
                         sellerPayout
                 );
@@ -187,15 +194,16 @@ public class PaymentService {
                                 request.idempotencyKey()
                                         + ":seller:"
                                         + entry.getKey()
-                        )
+                        ).hold()
                 );
+                }
             }
 
             WalletAccountEntity ownerAccount = WAR.findOwnerAccount()
                     .orElseThrow(OwnerWalletAccountNotFoundException::new);
 
             if (totalCommission.signum() > 0) {
-                int updatedOwnerRows = WAR.increaseBalance(
+                int updatedOwnerRows = WAR.increasePendingBalance(
                         ownerAccount.getUserId(),
                         totalCommission
                 );
@@ -214,7 +222,7 @@ public class PaymentService {
                                 totalCommission,
                                 TransactionStatus.COMPLETED,
                                 request.idempotencyKey() + ":owner"
-                        )
+                        ).hold()
                 );
             }
 
@@ -222,6 +230,7 @@ public class PaymentService {
                     PaymentStatus.PAID
             );
             order.changeStatus(OrderStatus.CONFIRMED);
+            workflow.record(buyerId, orderId, null, "ORDER_PAID", "CREATED", "CONFIRMED", "Funds held until return deadline");
 
             return order.getId();
         }
@@ -312,16 +321,15 @@ public class PaymentService {
         order.changePaymentStatus(PaymentStatus.REFUNDED);
     }
 
-    private void reverseWalletTransaction(
+    private void reverseWalletTransaction(//с wallet забираются деньги
             Long orderId,
             PaymentTransactionEntity original,
             TransactionType reversalType,
             String keyPart
     ) {
-        int updatedRows = WAR.decreaseBalance(
-                original.getUserId(),
-                original.getAmount()
-        );
+        int updatedRows = original.isPending()
+                ? WAR.decreasePendingBalance(original.getUserId(), original.getAmount())
+                : WAR.decreaseBalance(original.getUserId(), original.getAmount());
 
         if (updatedRows != 1) {
             throw new RefundNotAvailableException(

@@ -8,6 +8,13 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 
 @ControllerAdvice
 public class GlobalMvcExceptionHandler {
+    @ExceptionHandler(com.example.marketflow.marketplace.MarketplaceException.class)
+    public String handleMarketplace(com.example.marketflow.marketplace.MarketplaceException e,
+            jakarta.servlet.http.HttpServletResponse response, Model model) {
+        response.setStatus(e.getStatus().value());
+        model.addAttribute("message", e.getMessage());
+        return "error";
+    }
 
     @ExceptionHandler(EmailAlreadyExistsException.class)
     @ResponseStatus(HttpStatus.CONFLICT)

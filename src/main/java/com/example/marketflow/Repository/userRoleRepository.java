@@ -12,6 +12,7 @@ import com.example.marketflow.userRoles.UserRolesEntity;
 
 @Repository
 public interface userRoleRepository extends JpaRepository<UserRolesEntity,UserRoleId> {
+    boolean existsByRoleId(Short roleId);
     @Query(value = """
             SELECT role.name
             FROM roles role

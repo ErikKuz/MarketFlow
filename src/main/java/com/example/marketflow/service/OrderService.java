@@ -44,6 +44,7 @@ public class  OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final PaymentService paymentService;
+    private final com.example.marketflow.marketplace.OrderWorkflowService workflow;
 
     @Transactional
     public Long createOrder(Long buyerId) {
@@ -83,7 +84,7 @@ public class  OrderService {
                 throw new ProductNotFoundException(cartItem.getProductId());
             }
 
-            if (!Boolean.TRUE.equals(product.getActive())) {
+            if (!Boolean.TRUE.equals(product.getActive()) || product.isHidden()) {
                 throw new ProductUnavailableException();
             }
 
@@ -141,6 +142,7 @@ public class  OrderService {
         }
 
         orderItemRepository.saveAll(orderItems);
+        workflow.initialize(savedOrder, orderItems);
         cartItemRepository.deleteSelectedByBuyerId(buyerId);
 
         return savedOrder.getId();
@@ -159,6 +161,11 @@ public class  OrderService {
 
     @Transactional
     public void cancelOrder(Long orderId, Long buyerId) {
+        cancelOrder(orderId, buyerId, buyerId, "BUYER_CANCELLED");
+    }
+
+    @Transactional
+    public void cancelOrder(Long orderId, Long buyerId, Long actorId, String reason) {
         OrderEntity order = orderRepository.findForPayment(orderId, buyerId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
 
@@ -211,6 +218,7 @@ public class  OrderService {
             }
         }
 
+        workflow.cancelled(order, actorId, reason);
         order.changeStatus(OrderStatus.CANCELLED);
     }
 }

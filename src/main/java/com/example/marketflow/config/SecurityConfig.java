@@ -65,10 +65,14 @@ public class SecurityConfig {
             HttpSecurity http,
             SecurityContextRepository securityContextRepository,
             ApiAuthenticationEntryPoint authenticationEntryPoint,
-            ApiAccessDeniedHandler accessDeniedHandler
+            ApiAccessDeniedHandler accessDeniedHandler,
+            com.example.marketflow.Repository.UserRepository users,
+            com.example.marketflow.Repository.userRoleRepository roles
     ) throws Exception {
         http
                 .securityMatcher("/api/**")
+                .addFilterBefore(new com.example.marketflow.security.SessionAccountFilter(users, roles),
+                        org.springframework.security.web.access.intercept.AuthorizationFilter.class)
                 .securityContext(context -> context
                         .securityContextRepository(securityContextRepository)
                 )
@@ -85,6 +89,10 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
                         .requestMatchers("/api/v1/seller/**").hasRole("SELLER")
+                        .requestMatchers("/api/v1/owner/**").hasRole("OWNER")
+                        .requestMatchers("/api/v1/moderation/**").hasAnyRole("SELLER_MODERATOR", "OWNER")
+                        .requestMatchers("/api/v1/analytics/**").hasAnyRole("ANALYST", "OWNER")
+                        .requestMatchers("/api/v1/finance/**").authenticated()
                         .requestMatchers("/api/v1/auth/logout").authenticated()
                         .requestMatchers("/api/v1/account/**").authenticated()
                         .requestMatchers(
@@ -107,9 +115,13 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain mvcSecurityFilterChain(
             HttpSecurity http,
-            SecurityContextRepository securityContextRepository
+            SecurityContextRepository securityContextRepository,
+            com.example.marketflow.Repository.UserRepository users,
+            com.example.marketflow.Repository.userRoleRepository roles
     ) throws Exception {
         http
+                .addFilterBefore(new com.example.marketflow.security.SessionAccountFilter(users, roles),
+                        org.springframework.security.web.access.intercept.AuthorizationFilter.class)
                 .securityContext(context -> context
                         .securityContextRepository(securityContextRepository)
                 )
@@ -121,6 +133,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
                                 "/",
+                                "/catalog",
                                 "/login",
                                 "/register",
                                 "/css/**",
@@ -129,6 +142,10 @@ public class SecurityConfig {
                                 "/actuator/health"
                         ).permitAll()
                         .requestMatchers("/seller/**").hasRole("SELLER")
+                        .requestMatchers("/workspace/owner/**").hasRole("OWNER")
+                        .requestMatchers("/workspace/moderation/**").hasAnyRole("SELLER_MODERATOR", "OWNER")
+                        .requestMatchers("/workspace/analytics/**").hasAnyRole("ANALYST", "OWNER")
+                        .requestMatchers("/workspace/seller/**").hasRole("SELLER")
                         .requestMatchers("/account/**", "/Buyer/**").hasRole("BUYER")
                         .anyRequest().authenticated()
                 )

@@ -50,4 +50,28 @@ public interface WalletAccountRepository extends JpaRepository<WalletAccountEnti
             WHERE r.name = 'OWNER'
             """, nativeQuery = true)
     Optional<WalletAccountEntity> findOwnerAccount();
+
+    @Modifying
+    @Query("update WalletAccountEntity w set w.pendingBalance = w.pendingBalance + :amount where w.userId = :userId")
+    int increasePendingBalance(@Param("userId") Long userId, @Param("amount") BigDecimal amount);
+
+    @Modifying
+    @Query("update WalletAccountEntity w set w.pendingBalance = w.pendingBalance - :amount where w.userId = :userId and w.pendingBalance >= :amount")
+    int decreasePendingBalance(@Param("userId") Long userId, @Param("amount") BigDecimal amount);
+
+    @Modifying
+    @Query("update WalletAccountEntity w set w.pendingBalance = w.pendingBalance - :amount, w.balance = w.balance + :amount where w.userId = :userId and w.pendingBalance >= :amount")
+    int releasePendingBalance(@Param("userId") Long userId, @Param("amount") BigDecimal amount);
+
+    @Modifying
+    @Query("update WalletAccountEntity w set w.balance = w.balance - :amount, w.withdrawalReserved = w.withdrawalReserved + :amount where w.userId = :userId and w.balance >= :amount")
+    int reserveWithdrawal(@Param("userId") Long userId, @Param("amount") BigDecimal amount);
+
+    @Modifying
+    @Query("update WalletAccountEntity w set w.withdrawalReserved = w.withdrawalReserved - :amount where w.userId = :userId and w.withdrawalReserved >= :amount")
+    int completeWithdrawal(@Param("userId") Long userId, @Param("amount") BigDecimal amount);
+
+    @Modifying
+    @Query("update WalletAccountEntity w set w.withdrawalReserved = w.withdrawalReserved - :amount, w.balance = w.balance + :amount where w.userId = :userId and w.withdrawalReserved >= :amount")
+    int rejectWithdrawal(@Param("userId") Long userId, @Param("amount") BigDecimal amount);
 }

@@ -1,0 +1,36 @@
+<!DOCTYPE html><html lang="ru" xmlns:th="http://www.thymeleaf.org"><head th:replace="~{workspace/fragments :: head('Управление платформой')}"></head>
+<body><nav th:replace="~{workspace/fragments :: nav}"></nav><main class="workspace"><h1>Управление платформой</h1>
+<div class="grid"><section class="card"><h3>Доступная комиссия</h3><p class="metric" th:text="${wallet.available + ' ₽'}"></p></section>
+<section class="card"><h3>Ожидающая комиссия</h3><p class="metric" th:text="${wallet.pending + ' ₽'}"></p></section></div>
+<section class="panel"><h2>Комиссия для новых заказов</h2><p class="muted">Ставка сохраняется при создании заказа. 0.10 означает 10%; ранее созданные заказы не пересчитываются.</p>
+<form th:action="@{/workspace/owner/commission}" method="post"><label>Доля комиссии<input name="rate" type="number" min="0" max="0.99" step="0.0001" th:value="${commission}" required></label><button>Сохранить</button></form></section>
+<h2>Заявки на вывод средств</h2><section class="panel" th:each="w : ${withdrawals.content}">
+<h3 th:text="${'Заявка #' + w.id + ' · продавец #' + w.sellerId}"></h3><p><b th:text="${w.amount + ' ₽'}"></b> · <span th:text="${w.status}"></span> · <span th:text="${w.decisionReason}"></span></p>
+<form th:if="${w.status.name() == 'PENDING'}" th:action="@{/workspace/owner/withdrawals/{id}/decision(id=${w.id})}" method="post">
+<label>Решение<select name="approved"><option value="true">Выплатить на выбранную карту</option><option value="false">Отклонить и освободить сумму</option></select></label>
+<label>Причина<input name="reason" maxlength="1000" required></label><button>Подтвердить решение</button></form></section>
+<p th:if="${withdrawals.content.isEmpty()}">Заявок на вывод нет.</p>
+<div th:replace="~{workspace/fragments :: pager(${withdrawals}, '/workspace/owner')}"></div>
+<h2>Возвраты после получения</h2><section class="panel" th:each="r : ${returns.content}">
+<h3 th:text="${'Возврат #' + r.id + ' · заказ #' + r.orderId}"></h3><p th:text="${r.reason}"></p><p><b th:text="${r.status}"></b> · <span th:text="${r.decisionReason}"></span></p>
+<form th:if="${r.status.name() == 'PENDING'}" th:action="@{/workspace/owner/returns/{id}/decision(id=${r.id})}" method="post">
+<label>Решение<select name="approved"><option value="true">Вернуть деньги</option><option value="false">Отклонить</option></select></label>
+<label>Товары получены и пригодны к продаже?<select name="restock"><option value="false">Нет — не восстанавливать остаток</option><option value="true">Да — восстановить остаток</option></select></label>
+<label>Обоснование<input name="reason" maxlength="1000" required></label><button>Подтвердить решение</button></form></section>
+<p th:if="${returns.content.isEmpty()}">Заявок на возврат нет.</p>
+<div th:replace="~{workspace/fragments :: pager(${returns}, '/workspace/owner')}"></div>
+<details><summary>Создать сотрудника</summary><form th:action="@{/workspace/owner/staff}" method="post">
+<label>Email<input type="email" name="email" maxlength="320" required></label><label>Имя<input name="displayName" maxlength="100" required></label>
+<label>Начальный пароль<input type="password" name="password" minlength="12" maxlength="100" autocomplete="new-password" required></label>
+<label>Роль<select name="role"><option value="SELLER_MODERATOR">Модератор</option><option value="ANALYST">Аналитик</option></select></label><button>Создать</button></form></details>
+<h2>Пользователи и роли</h2><details th:each="u : ${users.content}"><summary th:text="${'#' + u.id + ' ' + u.displayName + ' · ' + u.email + ' · ' + u.status}"></summary>
+<p th:text="${u.roles}"></p>
+<form th:unless="${u.roles.contains('OWNER')}" th:action="@{/workspace/owner/users/{id}/roles(id=${u.id})}" method="post">
+<label>Роль<select name="role"><option value="SELLER_MODERATOR">Модератор</option><option value="ANALYST">Аналитик</option></select></label>
+<label>Действие<select name="granted"><option value="true">Назначить</option><option value="false">Отозвать</option></select></label><button>Изменить роль</button></form>
+<form th:unless="${u.roles.contains('OWNER')}" th:action="@{/workspace/owner/users/{id}/block(id=${u.id})}" method="post">
+<input type="hidden" name="blocked" th:value="${u.status == 'ACTIVE'}"><label>Причина<input name="reason" maxlength="1000" required></label>
+<button th:text="${u.status == 'ACTIVE' ? 'Заблокировать аккаунт' : 'Разблокировать аккаунт'}"></button></form></details>
+<div th:replace="~{workspace/fragments :: pager(${users}, '/workspace/owner')}"></div>
+<h2>Аудит</h2><div th:replace="~{workspace/fragments :: audit(${audit.content})}"></div>
+<div th:replace="~{workspace/fragments :: pager(${audit}, '/workspace/owner')}"></div></main></body></html>

@@ -23,6 +23,12 @@ import jakarta.servlet.http.HttpServletRequest;
 )
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class GlobalRestExceptionHandler {
+    @ExceptionHandler(com.example.marketflow.marketplace.MarketplaceException.class)
+    public ResponseEntity<ApiError> handleMarketplace(
+            com.example.marketflow.marketplace.MarketplaceException e, HttpServletRequest request) {
+        return ResponseEntity.status(e.getStatus()).body(new ApiError(Instant.now(), e.getStatus().value(),
+                e.getCode(), e.getMessage(), request.getRequestURI(), List.of(), null));
+    }
     @ExceptionHandler(ProductNotFoundException.class)
     public ResponseEntity<ApiError> handleProductNotFoundException(ProductNotFoundException exception,
         HttpServletRequest request){
