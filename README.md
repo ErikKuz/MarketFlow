@@ -2,186 +2,73 @@
 
 [Русская версия](README.ru.md)
 
-MarketFlow is a work-in-progress multi-vendor marketplace built as a server-rendered Spring Boot application. The project focuses on marketplace domain modelling, transactional business logic, PostgreSQL persistence, and the separation of buyer and seller workflows.
-
-## Current functionality
-
-### Buyer workflow
-
-- User registration and login
-- Product catalogue containing active products with available stock
-- Product details page
-- Shopping-cart item creation, quantity updates, selection, and removal
-- Cart-total calculation for selected items
-- Payment-card attachment and listing
-- Initial order creation with order-item snapshots
-
-### Seller workflow
-
-- Seller dashboard with the seller's own products
-- Product creation and details
-- Product editing
-- Product activation and deactivation
-- Inventory restocking
-- Ownership checks for seller operations
-
-### Platform concerns
-
-- PostgreSQL persistence through Spring Data JPA
-- Versioned database schema with Flyway
-- Request validation and centralized MVC exception handling
-- Thymeleaf templates for the current server-rendered UI
-- Spring Boot Actuator health endpoint
-- Monetary values represented with `BigDecimal`
-
-## Tech stack
-
-- Java 21
-- Spring Boot 4
-- Spring MVC and Thymeleaf
-- Spring Data JPA
-- Spring Security components
-- PostgreSQL
-- Flyway
-- Jakarta Validation
-- Maven
-- JUnit 5
-
-## Architecture
-
-The current application follows a layered MVC structure:
+MarketFlow is a learning multi-vendor marketplace built with Java and Spring Boot. The current version intentionally focuses on one complete flow:
 
 ```text
-HTTP request
-    -> Controller
-    -> Service
-    -> Repository
-    -> PostgreSQL
-    -> Thymeleaf view
+catalogue → cart → order → simulated payment → seller fulfillment → receipt
 ```
 
-The codebase separates common buyer flows from seller-specific controllers and services. DTOs are used at web and service boundaries, while JPA entities represent persisted marketplace state.
+An order may contain products from multiple sellers. Each seller gets a separate fulfillment part and can only process their own products. The overall order becomes `COMPLETED` after the buyer receives every part.
 
-## Main domain tables
+## Implemented scope
+
+Buyers can register, sign in with a server-side HTTP session, browse products, use the cart, attach a simulated card, create and pay for an order, list their orders, and confirm receipt of each shipment.
+
+Sellers register directly, manage only their own products and stock, see only paid parts containing their products, and move each part through:
+
+```text
+NEW → PROCESSING → SELLERSENDPRODUCT → USERGETPRODUCT
+```
+
+The overall order follows:
+
+```text
+CREATED → CONFIRMED → SELLERSSTARTWORK → SELLERSENDWORKANDSEND → COMPLETED
+    └───────────────→ CANCELLED
+```
+
+Payment is a learning simulation, not a banking integration. One database transaction verifies card ownership and balance, conditionally debits stock, updates the simulated card balance, accrues seller proceeds and platform commission to pending virtual balances, and records each money movement. Receipt releases pending funds to available balances. Pessimistic locks, atomic SQL and an idempotency key prevent double charges and overselling.
+
+Both MVC + Thymeleaf pages and REST endpoints are implemented. REST behavior is documented by OpenAPI contracts. Spring Security uses `JSESSIONID`, a server-side session, `BUYER` / `SELLER` roles and CSRF protection.
+
+## Deliberately outside this MVP
+
+Seller applications, moderation, analytics, returns after receipt and automatic payment deadlines are not active features. Migration V12 archives their old data in the PostgreSQL schema `<main_schema>_pre_mvp` instead of deleting it. Virtual seller/platform wallets, commission, direct simulated-card withdrawal and refund before fulfillment are active.
+
+## Stack
+
+Java 21, Spring Boot 4, Spring MVC, Thymeleaf, Spring Security, Spring Data JPA, Hibernate, PostgreSQL, Flyway, OpenAPI, Maven, JUnit 5, Mockito and MockMvc.
+
+## Main tables
 
 | Table | Purpose |
 | --- | --- |
-| `users` | Registered marketplace users |
-| `roles` | Supported account roles |
-| `user_roles` | User-to-role assignments |
-| `products` | Seller products, prices, availability, and stock |
-| `cart_items` | Buyer shopping-cart state |
-| `orders` | Order header, buyer, status, total, and timestamps |
-| `order_items` | Product snapshots stored at order-creation time |
-| `payment_cards` | Simulated user payment cards |
-| `flyway_schema_history` | Applied migration history |
+| `users`, `roles`, `user_roles` | Accounts and roles |
+| `products` | Seller products, prices and stock |
+| `cart_items` | Buyer carts |
+| `orders` | Overall order and state |
+| `order_items` | Product and price snapshots |
+| `seller_orders` | Independent seller fulfillment parts |
+| `payment_cards` | Simulated cards and balances |
+| `wallet_accounts` | Pending and available virtual seller/platform balances |
+| `payment_transactions` | Payments, accruals, commission, releases, withdrawals and refunds |
+| `flyway_schema_history` | Applied migrations |
 
-## Documentation
+## Run locally
 
-- [Project idea](docs/project-idea.md)
-- [Technical specification](docs/technical-specification.md)
-- [Architecture](docs/architecture.md)
-- [Database](docs/database.md)
-- [API development](docs/api-development.md)
-- [Implementation tasks](docs/tasks/README.md)
-
-## Project structure
-
-```text
-MarketFlow/
-├── .mvn/
-├── docs/
-│   ├── architecture.md
-│   ├── api-development.md
-│   ├── database.md
-│   ├── diagrams/
-│   └── tasks/
-├── src/
-├── .editorconfig
-├── .env.example
-├── LICENSE
-├── pom.xml
-├── mvnw
-├── mvnw.cmd
-├── README.md
-└── README.ru.md
-```
-
-## Running locally
-
-### Requirements
-
-- Java 21
-- PostgreSQL
-- Git
-
-Create a PostgreSQL database, copy `.env.example` to `.env`, and provide your local credentials:
-
-```env
-DB_URL=jdbc:postgresql://localhost:5432/marketflow
-DB_USERNAME=postgres
-DB_PASSWORD=change_me
-```
-
-Never commit the real `.env` file.
-
-Run on Linux or macOS:
-
-```bash
-./mvnw spring-boot:run
-```
-
-Run on Windows:
+Create PostgreSQL, copy `.env.example` to `.env`, configure `DB_URL`, `DB_USERNAME` and `DB_PASSWORD`, then run:
 
 ```powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-Flyway will apply the database migrations at startup. The application will be available at `http://localhost:8080`.
+Run the standard test suite with `.\mvnw.cmd test`. Real PostgreSQL tests are enabled only when `MARKETFLOW_TEST_POSTGRES_URL` is set and create isolated schemas.
 
-## Running tests
+REST endpoints are under `/api/v1`; contracts are in [openapi](openapi).
 
-Linux or macOS:
+Seller withdrawal is available at `POST /api/v1/wallet/withdraw`.
 
-```bash
-./mvnw test
-```
+## Next step
 
-Windows:
-
-```powershell
-.\mvnw.cmd test
-```
-
-## Main routes
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/` | Start page |
-| `GET`, `POST` | `/register` | User registration |
-| `GET`, `POST` | `/login` | User login |
-| `GET` | `/account/catalog` | Product catalogue |
-| `GET` | `/account/products/{productId}` | Product details |
-| `GET` | `/account/cart` | Buyer cart |
-| `GET` | `/account/checkout` | Checkout summary |
-| `POST` | `/account/orders` | Create an order from selected cart items |
-| `GET` | `/seller/account` | Seller dashboard |
-| `GET` | `/seller/products/new` | Product-creation form |
-| `POST` | `/seller/products` | Create a seller product |
-| `GET`, `POST` | `/seller/products/{productId}/edit` | Edit a seller product |
-| `POST` | `/seller/products/{productId}/restock` | Increase product stock |
-| `GET` | `/actuator/health` | Application health |
-
-## Current status
-
-This repository is under active development. The public branch contains the MVC marketplace foundation, cart and seller workflows, and initial order creation. It does **not** currently include production-ready payment integration, Redis, RabbitMQ, Docker packaging, OpenAPI, or a complete security policy. Those technologies will be added only when their use cases are implemented and verified.
-
-## Roadmap
-
-- Complete the order lifecycle and payment model
-- Replace temporary session-based authentication with a complete Spring Security policy
-- Add REST endpoints and an OpenAPI contract
-- Add unit and integration tests, including Testcontainers
-- Add Docker packaging and GitHub Actions CI
-- Introduce Redis and RabbitMQ for justified caching and asynchronous-event scenarios
+The next infrastructure step is RabbitMQ for asynchronous domain events and notifications. Redis may follow later for catalogue caching when it provides measurable value.
 

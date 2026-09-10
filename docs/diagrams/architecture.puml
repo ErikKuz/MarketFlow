@@ -8,26 +8,26 @@ actor Buyer
 actor Seller
 
 rectangle "MarketFlow Spring Boot Application" {
-  component "Buyer MVC Controllers" as BuyerControllers
-  component "Seller MVC Controllers" as SellerControllers
-  component "Application Services" as Services
-  component "Spring Data JPA Repositories" as Repositories
-  component "Thymeleaf Views" as Views
+  component "Spring Security
+Session + CSRF" as Security
+  component "MVC Controllers" as Mvc
+  component "REST Controllers" as Rest
+  component "Transactional Services" as Services
+  component "Spring Data JPA" as Repositories
+  component "Thymeleaf" as Views
   component "Flyway" as Flyway
-  component "Actuator" as Actuator
 }
 
 database "PostgreSQL" as PostgreSQL
 
-Buyer --> BuyerControllers
-Seller --> SellerControllers
-BuyerControllers --> Services
-SellerControllers --> Services
+Buyer --> Security
+Seller --> Security
+Security --> Mvc
+Security --> Rest
+Mvc --> Services
+Rest --> Services
 Services --> Repositories
 Repositories --> PostgreSQL
-BuyerControllers --> Views
-SellerControllers --> Views
-Flyway --> PostgreSQL : schema migrations
-Actuator --> PostgreSQL : health check
-
+Mvc --> Views
+Flyway --> PostgreSQL : V1-V12
 @enduml

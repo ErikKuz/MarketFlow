@@ -2,14 +2,21 @@ openapi: 3.0.3
 
 info:
   title: MarketFlow Order Payments API
-  version: 0.1.0
-  description: Payment preparation and idempotent order payment for the authenticated buyer.
+  version: 0.3.0
+  description: >
+    Simulated card payment, not a banking integration. In one transaction it debits stock
+    and the buyer card, records PAYMENT, accrues seller funds and platform commission to
+    pending wallet balances, and records the corresponding ledger entries.
+    Reusing a successful key with the same order, user and card returns the original result.
+    A failed balance-check key remains failed; use a new key after adding funds.
+    A seller can withdraw available virtual funds to their own simulated card.
 
 servers:
   - url: http://localhost:8080
 
 tags:
   - name: Payments
+  - name: Wallets
 
 security:
   - sessionCookie: []
@@ -29,13 +36,20 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PaymentPage' }
         '400': { $ref: '#/components/responses/InvalidOrderId' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '404': { $ref: '#/components/responses/OrderNotFound' }
+        '409': { $ref: '#/components/responses/PaymentConflict' }
     post:
       tags: [Payments]
       summary: Pay for an order
       operationId: payOrder
       parameters:
+        - name: X-CSRF-TOKEN
+          in: header
+          required: true
+          description: Token from GET /api/v1/csrf for the same session
+          schema: { type: string }
         - $ref: '#/components/parameters/OrderId'
       requestBody:
         required: true
@@ -49,10 +63,35 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PaymentResult' }
         '400': { $ref: '#/components/responses/ValidationErrorResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '404': { $ref: '#/components/responses/PaymentResourceNotFound' }
         '409': { $ref: '#/components/responses/PaymentConflict' }
-        '500': { $ref: '#/components/responses/PaymentProcessingFailed' }
+
+  /api/v1/wallet/withdraw:
+    post:
+      tags: [Wallets]
+      summary: Withdraw available seller funds to a simulated card
+      operationId: withdrawSellerFunds
+      parameters:
+        - name: X-CSRF-TOKEN
+          in: header
+          required: true
+          description: Token from GET /api/v1/csrf for the same session
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WithdrawRequest' }
+      responses:
+        '204':
+          description: Funds withdrawn; an identical repeated request is a no-op
+        '400': { $ref: '#/components/responses/ValidationErrorResponse' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/PaymentResourceNotFound' }
+        '409': { $ref: '#/components/responses/PaymentConflict' }
 
 components:
   securitySchemes:
@@ -75,6 +114,14 @@ components:
       properties:
         cardId: { type: integer, format: int64, minimum: 1 }
         idempotencyKey: { type: string, minLength: 1, maxLength: 100 }
+
+    WithdrawRequest:
+      type: object
+      required: [cardId, amount, idempotencyKey]
+      properties:
+        cardId: { type: integer, format: int64, minimum: 1 }
+        amount: { type: number, minimum: 0, exclusiveMinimum: true, multipleOf: 0.01 }
+        idempotencyKey: { type: string, minLength: 1, maxLength: 150 }
 
     PaymentResult:
       type: object
@@ -149,12 +196,12 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/ApiError' }
     PaymentConflict:
-      description: Funds are insufficient, payment was already processed, or the order status does not allow payment
+      description: Funds or stock are insufficient, product is inactive, an idempotency key conflicts, or the order state does not allow payment
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ApiError' }
-    PaymentProcessingFailed:
-      description: An internal wallet account could not be updated
+    Forbidden:
+      description: Required role is missing or the CSRF token is missing/invalid
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ApiError' }

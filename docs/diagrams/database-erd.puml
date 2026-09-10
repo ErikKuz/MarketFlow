@@ -53,6 +53,8 @@ entity orders {
   buyer_id : BIGINT <<FK>>
   status : VARCHAR(30)
   total_amount : NUMERIC(14,2)
+  payment_status : VARCHAR(30)
+  delivered_at : TIMESTAMPTZ
   created_at : TIMESTAMPTZ
   updated_at : TIMESTAMPTZ
 }
@@ -67,6 +69,30 @@ entity order_items {
   unit_price : NUMERIC(12,2)
   quantity : INTEGER
   total_price : NUMERIC(14,2)
+}
+
+entity seller_orders {
+  * id : BIGINT <<PK>>
+  --
+  order_id : BIGINT <<FK>>
+  seller_id : BIGINT <<FK>>
+  total_amount : NUMERIC(14,2)
+  status : VARCHAR(30)
+  created_at : TIMESTAMPTZ
+  shipped_at : TIMESTAMPTZ
+  delivered_at : TIMESTAMPTZ
+}
+
+entity payment_transactions {
+  * id : BIGINT <<PK>>
+  --
+  order_id : BIGINT <<FK>>
+  user_id : BIGINT <<FK>>
+  payment_card_id : BIGINT <<FK>>
+  type : PAYMENT
+  amount : NUMERIC(14,2)
+  status : VARCHAR(30)
+  idempotency_key : VARCHAR(100) <<UK>>
 }
 
 entity payment_cards {
@@ -88,6 +114,11 @@ users ||--o{ orders : buyer
 orders ||--|{ order_items
 products ||--o{ order_items
 users ||--o{ order_items : seller
+orders ||--|{ seller_orders
+users ||--o{ seller_orders : seller
+orders ||--o{ payment_transactions
+users ||--o{ payment_transactions : buyer
+payment_cards ||--o{ payment_transactions
 users ||--o{ payment_cards
 
 @enduml

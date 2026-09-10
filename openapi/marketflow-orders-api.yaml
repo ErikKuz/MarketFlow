@@ -2,82 +2,258 @@ openapi: 3.0.3
 
 info:
   title: MarketFlow Orders API
-  version: 0.1.0
-  description: Order creation and order details for the authenticated buyer.
+  version: 0.3.0
+  description: >
+    Multi-seller MVP. Prices are snapshotted at creation and stock is debited at
+    payment. Each seller ships their own part. The overall order completes only
+    after the buyer confirms receipt of every part. Paid orders can be refunded
+    before a seller starts fulfillment; pending seller and platform accruals are reversed.
 
 servers:
   - url: http://localhost:8080
 
 tags:
   - name: Orders
+  - name: Seller fulfillment
 
 security:
   - sessionCookie: []
 
 paths:
   /api/v1/orders:
+    get:
+      tags: [Orders]
+      summary: List the authenticated buyer's orders
+      operationId: listBuyerOrders
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Orders returned newest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderPage'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [Orders]
       summary: Create an order from selected cart items
+      description: >
+        Saves product names and prices as snapshots, creates one seller part for
+        every seller, and removes the selected cart items. Stock is not debited
+        until payment.
       operationId: createOrder
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
       responses:
         '201':
-          description: Order created successfully
+          description: Order created
           headers:
             Location:
               schema: { type: string, format: uri-reference }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/CreatedOrder' }
+              schema:
+                $ref: '#/components/schemas/CreatedOrder'
         '400':
-          $ref: '#/components/responses/InvalidOrderRequest'
+          $ref: '#/components/responses/InvalidRequest'
         '401':
           $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/ProductNotFound'
+          $ref: '#/components/responses/ResourceNotFound'
         '409':
-          $ref: '#/components/responses/OrderCreationConflict'
+          $ref: '#/components/responses/Conflict'
 
   /api/v1/orders/{orderId}:
     get:
       tags: [Orders]
-      summary: Get an order belonging to the authenticated buyer
+      summary: Get the buyer's own order and item snapshots
       operationId: getOrder
       parameters:
         - $ref: '#/components/parameters/OrderId'
       responses:
         '200':
-          description: Order returned successfully
+          description: Order returned
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/OrderDetails' }
+              schema:
+                $ref: '#/components/schemas/OrderDetails'
         '400':
-          $ref: '#/components/responses/InvalidOrderId'
+          $ref: '#/components/responses/InvalidRequest'
         '401':
           $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/OrderNotFound'
+          $ref: '#/components/responses/ResourceNotFound'
 
   /api/v1/orders/{orderId}/cancel:
     post:
       tags: [Orders]
-      summary: Cancel an order and refund it when it has already been paid
+      summary: Cancel an unpaid order or refund a paid order before fulfillment
       operationId: cancelOrder
       parameters:
         - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Order cancelled successfully
+          description: Order cancelled or refunded; repeating cancellation is a no-op
         '400':
-          $ref: '#/components/responses/InvalidOrderId'
+          $ref: '#/components/responses/InvalidRequest'
         '401':
           $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/OrderNotFound'
+          $ref: '#/components/responses/ResourceNotFound'
         '409':
-          $ref: '#/components/responses/OrderCancellationConflict'
-        '500':
-          $ref: '#/components/responses/OrderCancellationFailure'
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/orders/{orderId}/fulfillments:
+    get:
+      tags: [Orders]
+      summary: Get the seller parts of the buyer's own order
+      operationId: getOrderFulfillments
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Seller parts returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SellerOrder'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+
+  /api/v1/orders/{orderId}/fulfillments/{partId}/receive:
+    post:
+      tags: [Orders]
+      summary: Confirm receipt of one shipped seller part
+      description: Releases this part's seller funds and platform commission from pending to available balances.
+      operationId: receiveSellerOrder
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/PartId'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Receipt confirmed; repeating it is a no-op
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/seller/orders:
+    get:
+      tags: [Seller fulfillment]
+      summary: List paid order parts belonging to the authenticated seller
+      operationId: listSellerOrders
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Seller parts returned newest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SellerOrderPage'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/seller/orders/{partId}:
+    get:
+      tags: [Seller fulfillment]
+      summary: Get the seller's own part and its item snapshots
+      operationId: getSellerOrder
+      parameters:
+        - $ref: '#/components/parameters/PartId'
+      responses:
+        '200':
+          description: Seller part returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SellerOrderDetails'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+
+  /api/v1/seller/orders/{partId}/process:
+    post:
+      tags: [Seller fulfillment]
+      summary: Move the seller's own part from NEW to PROCESSING
+      operationId: processSellerOrder
+      parameters:
+        - $ref: '#/components/parameters/PartId'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Processing started; repeating the current state is a no-op
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/seller/orders/{partId}/ship:
+    post:
+      tags: [Seller fulfillment]
+      summary: Move the seller's own part from PROCESSING to SELLERSENDPRODUCT
+      operationId: shipSellerOrder
+      parameters:
+        - $ref: '#/components/parameters/PartId'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Part shipped; repeating the current state is a no-op
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
 components:
   securitySchemes:
@@ -87,11 +263,30 @@ components:
       name: JSESSIONID
 
   parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
     OrderId:
       name: orderId
       in: path
       required: true
       schema: { type: integer, format: int64, minimum: 1 }
+    PartId:
+      name: partId
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    CsrfToken:
+      name: X-CSRF-TOKEN
+      in: header
+      required: true
+      description: Token returned by GET /api/v1/csrf for the same HTTP session
+      schema: { type: string }
 
   schemas:
     CreatedOrder:
@@ -100,22 +295,46 @@ components:
       properties:
         orderId: { type: integer, format: int64, minimum: 1 }
 
+    OrderSummary:
+      type: object
+      required: [id, status, paymentStatus, totalPrice, createdAt]
+      properties:
+        id: { type: integer, format: int64, minimum: 1 }
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        paymentStatus:
+          $ref: '#/components/schemas/PaymentStatus'
+        totalPrice: { type: number, multipleOf: 0.01 }
+        createdAt: { type: string, format: date-time }
+
+    OrderPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderSummary'
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+
     OrderDetails:
       type: object
       required: [id, status, paymentStatus, totalPrice, createdAt, items]
       properties:
         id: { type: integer, format: int64, minimum: 1 }
         status:
-          type: string
-          enum: [CREATED, CONFIRMED, PROCESSING, COMPLETED, CANCELLED]
+          $ref: '#/components/schemas/OrderStatus'
         paymentStatus:
-          type: string
-          enum: [NOT_PAID, PROCESSING, PAID, FAILED, REFUNDED]
-        totalPrice: { type: number, minimum: 0, exclusiveMinimum: true, multipleOf: 0.01 }
+          $ref: '#/components/schemas/PaymentStatus'
+        totalPrice: { type: number, multipleOf: 0.01 }
         createdAt: { type: string, format: date-time }
         items:
           type: array
-          items: { $ref: '#/components/schemas/OrderItem' }
+          items:
+            $ref: '#/components/schemas/OrderItem'
 
     OrderItem:
       type: object
@@ -124,10 +343,72 @@ components:
         productId: { type: integer, format: int64, minimum: 1 }
         sellerId: { type: integer, format: int64, minimum: 1 }
         productName: { type: string, minLength: 1, maxLength: 200 }
-        unitPrice: { type: number, minimum: 0, exclusiveMinimum: true, multipleOf: 0.01 }
+        unitPrice: { type: number, multipleOf: 0.01 }
         quantity: { type: integer, format: int32, minimum: 1 }
-        totalPrice: { type: number, minimum: 0, exclusiveMinimum: true, multipleOf: 0.01 }
-        imageUrl: { type: string, format: uri, nullable: true, maxLength: 1000 }
+        totalPrice: { type: number, multipleOf: 0.01 }
+        imageUrl: { type: string, nullable: true, maxLength: 1000 }
+
+    SellerOrder:
+      type: object
+      required: [id, orderId, sellerId, status, totalAmount, commissionRate, commissionAmount, sellerAmount, settlementStatus, createdAt]
+      properties:
+        id: { type: integer, format: int64, minimum: 1 }
+        orderId: { type: integer, format: int64, minimum: 1 }
+        sellerId: { type: integer, format: int64, minimum: 1 }
+        status:
+          $ref: '#/components/schemas/OBSERFFORSENDBYSELLERPRODUCTSTATUS'
+        totalAmount: { type: number, multipleOf: 0.01 }
+        commissionRate: { type: number, minimum: 0, maximum: 0.9999 }
+        commissionAmount: { type: number, minimum: 0, multipleOf: 0.01 }
+        sellerAmount: { type: number, minimum: 0, multipleOf: 0.01 }
+        settlementStatus:
+          $ref: '#/components/schemas/OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS'
+        createdAt: { type: string, format: date-time }
+        shippedAt: { type: string, format: date-time, nullable: true }
+        deliveredAt: { type: string, format: date-time, nullable: true }
+
+    SellerOrderPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellerOrder'
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+
+    SellerOrderDetails:
+      type: object
+      required: [fulfillment, paymentStatus, items]
+      properties:
+        fulfillment:
+          $ref: '#/components/schemas/SellerOrder'
+        paymentStatus:
+          $ref: '#/components/schemas/PaymentStatus'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+
+    OrderStatus:
+      type: string
+      enum: [CREATED, CONFIRMED, SELLERSSTARTWORK, SELLERSENDWORKANDSEND, COMPLETED, CANCELLED]
+
+    PaymentStatus:
+      type: string
+      enum: [NOT_PAID, PROCESSING, PAID, FAILED, REFUNDED]
+
+    OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS:
+      type: string
+      enum: [NOT_DISTRIBUTE, PENDINGWALLET, MAINWALLET, RETURNMONEY]
+
+    OBSERFFORSENDBYSELLERPRODUCTSTATUS:
+      type: string
+      description: RETURNED is retained only for historical rows
+      enum: [NEW, PROCESSING, SELLERSENDPRODUCT, USERGETPRODUCT, CANCELLED, RETURNED]
 
     ApiError:
       type: object
@@ -138,8 +419,12 @@ components:
         code: { type: string }
         message: { type: string }
         path: { type: string }
-        validationErrors: { type: array, items: { $ref: '#/components/schemas/ValidationError' } }
+        validationErrors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
         traceId: { type: string, nullable: true }
+
     ValidationError:
       type: object
       required: [field, message]
@@ -148,43 +433,33 @@ components:
         message: { type: string }
 
   responses:
-    InvalidOrderRequest:
-      description: Stored cart quantity is invalid
+    InvalidRequest:
+      description: An ID, page parameter, quantity, or stored cart value is invalid
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
-    InvalidOrderId:
-      description: Order ID has an invalid value or format
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
+          schema:
+            $ref: '#/components/schemas/ApiError'
     AuthenticationRequired:
       description: Authentication is required
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
-    OrderNotFound:
-      description: Order does not exist or does not belong to this buyer
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Forbidden:
+      description: Role, ownership, or CSRF validation failed
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
-    ProductNotFound:
-      description: A selected product no longer exists
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    ResourceNotFound:
+      description: Resource does not exist or does not belong to this user
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
-    OrderCreationConflict:
-      description: Selected items are missing, unavailable, or have insufficient stock
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Conflict:
+      description: Product availability or the current status prevents the operation
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
-    OrderCancellationConflict:
-      description: The current order or payment status does not allow cancellation or refund
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
-    OrderCancellationFailure:
-      description: Cancellation was rolled back because stock or money could not be restored
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/ApiError' }
+          schema:
+            $ref: '#/components/schemas/ApiError'

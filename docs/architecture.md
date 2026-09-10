@@ -2,13 +2,13 @@
 
 ## Overview
 
-MarketFlow is currently a modular monolith implemented as a server-rendered Spring Boot MVC application. Buyer and seller workflows share one deployable application and one PostgreSQL database while remaining separated at the controller and service levels.
+MarketFlow is currently a modular monolith implemented as a Spring Boot application with MVC + Thymeleaf and REST boundaries. Buyer and seller workflows share one deployable application and one PostgreSQL database while remaining separated at the controller and service levels.
 
 The current structure favours a straightforward request flow:
 
 ```text
-HTTP request -> Controller -> Service -> Repository -> PostgreSQL
-                                      -> Thymeleaf view model
+HTTP request -> Spring Security -> MVC/REST Controller -> Service -> Repository -> PostgreSQL
+                                                        -> JSON or Thymeleaf
 ```
 
 The architecture is intentionally kept as a monolith while the core marketplace rules are still evolving. Splitting the application into services before the domain boundaries and operational requirements are stable would add deployment and consistency complexity without a demonstrated benefit.
@@ -25,11 +25,11 @@ Services implement use cases such as registration, catalogue browsing, cart mana
 
 ### Persistence layer
 
-Spring Data JPA repositories persist users, roles, products, carts, orders, order items, and payment-card simulations. Flyway is the only supported mechanism for changing the database schema; Hibernate validates the schema at startup.
+Spring Data JPA repositories persist users, roles, products, carts, orders, order-item snapshots, seller fulfillment parts, simulated cards, and payment attempts. Flyway is the only supported mechanism for changing the database schema; Hibernate validates the schema at startup.
 
 ### Presentation layer
 
-Thymeleaf templates render the current HTML interface. The planned REST API will be added as a separate boundary so that domain and application logic can be reused instead of duplicated.
+Thymeleaf templates render the current HTML interface. REST controllers and MVC controllers call the same transactional services, so business rules are not duplicated.
 
 ## Important domain rules
 
@@ -48,11 +48,10 @@ Thymeleaf templates render the current HTML interface. The planned REST API will
 
 ## Planned evolution
 
-1. Stabilize the order, payment, security, and inventory workflows.
-2. Introduce an OpenAPI-first REST boundary under `/api/v1`.
-3. Add unit and integration tests, including PostgreSQL Testcontainers.
+1. Keep the synchronous multi-seller order path stable.
+2. Publish committed order and delivery events through RabbitMQ.
+3. Add Redis only when catalogue caching has measurable benefit.
 4. Add CI and container packaging.
-5. Introduce Redis or RabbitMQ only for measured caching or asynchronous-event requirements.
 
 ## Diagrams
 

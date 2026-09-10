@@ -15,7 +15,10 @@ PostgreSQL is the source of truth for MarketFlow. Spring Data JPA handles persis
 | `cart_items` | Buyer-specific cart quantities and selection state |
 | `orders` | Order header, buyer, lifecycle status, amount, and timestamps |
 | `order_items` | Immutable product snapshots associated with an order |
+| `seller_orders` | One independently fulfilled part per seller and order |
 | `payment_cards` | Simulated card tokens, masked numbers, balances, and activity state |
+| `wallet_accounts` | Pending and available virtual balances for sellers and the platform |
+| `payment_transactions` | Idempotent payment, accrual, commission, release, withdrawal and refund entries |
 | `flyway_schema_history` | Flyway migration history |
 
 ## Data-integrity rules
@@ -26,7 +29,14 @@ PostgreSQL is the source of truth for MarketFlow. Spring Data JPA handles persis
 - Cart and order-item quantities must be positive.
 - Order totals and order-item totals must be positive.
 - Foreign keys protect ownership and order relationships.
+- A seller has at most one `seller_orders` row per order.
+- Payment idempotency keys are unique.
+- Conditional stock updates prevent negative inventory.
 - Order-item snapshot fields preserve historical product information.
+
+## V12 archive
+
+Migration V12 moves inactive pre-MVP tables to `<main_schema>_pre_mvp` and copies removed order metadata and financial ledger rows there. It does not discard the previous data. The active schema then contains only the MVP tables.
 
 ## Monetary values
 

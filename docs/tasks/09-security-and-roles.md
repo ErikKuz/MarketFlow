@@ -1,56 +1,18 @@
-# Задача 9. Spring Security и роли
+# Spring Security и роли
 
-## Проблема
+Текущая политика использует серверную HTTP-сессию:
 
-Сейчас `HttpSession` вручную хранит `userId`, а Security разрешает все запросы. Пользователь может попытаться открыть seller или owner endpoint вручную.
+- `JSESSIONID` идентифицирует сессию;
+- `SecurityContext` хранит аутентифицированного пользователя;
+- идентификатор сессии меняется после входа;
+- изменяющие запросы требуют CSRF-токен;
+- REST возвращает единые JSON-ответы 401/403;
+- заблокированный или удалённый аккаунт лишается доступа на следующем запросе.
 
-## Для чего это нужно
+Активные бизнес-роли:
 
-Spring Security должен выполнять аутентификацию, хранить текущего пользователя и ограничивать доступ по ролям.
+- `BUYER` — корзина, карты, заказы, оплата и подтверждение получения;
+- `SELLER` — собственные товары и собственные части заказов.
 
-## Роли
-
-```text
-BUYER
-SELLER
-SELLER_MODERATOR
-ANALYST
-OWNER
-```
-
-Один пользователь может иметь несколько ролей через `user_roles`.
-
-## Что создать или изменить
-
-```text
-security/CustomUserDetailsService.java
-security/MarketFlowUserPrincipal.java
-config/SecurityConfig.java
-```
-
-## Правила доступа
-
-```text
-/, /login, /register, /css/**        permitAll
-/account/**                          authenticated
-/seller/**                           hasRole("SELLER")
-/moderator/**                        hasRole("SELLER_MODERATOR")
-/analytics/**                        hasAnyRole("ANALYST", "OWNER")
-/owner/**                            hasRole("OWNER")
-```
-
-## Использование в Controller
-
-Вместо ручного `HttpSession` получать текущего пользователя через `Authentication` или:
-
-```java
-@AuthenticationPrincipal MarketFlowUserPrincipal principal
-```
-
-## Дополнительно
-
-- Оставить BCrypt `PasswordEncoder`.
-- Включить CSRF для HTML-форм и добавить CSRF-токены.
-- Настроить страницы входа и `403`.
-- Проверять принадлежность ресурсов в Service даже при наличии ролей.
+Маршрут `/api/v1/seller/**` и `/workspace/seller/**` требует `SELLER`; покупательские маршруты требуют `BUYER`. Кроме роли сервис проверяет владельца каждого ресурса.
 
