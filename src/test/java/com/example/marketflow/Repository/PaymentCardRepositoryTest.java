@@ -1,103 +1,29 @@
 package com.example.marketflow.Repository;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
+import static org.junit.jupiter.api.Assertions.*;
 import java.math.BigDecimal;
-
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-
 import com.example.marketflow.payment_cards.PaymentCardEntity;
-
-import jakarta.persistence.EntityManager;
 
 @DataJpaTest
 class PaymentCardRepositoryTest {
-
-    @Autowired
-    private PaymentCardRepository paymentCardRepository;
-
-    @Autowired
-    private EntityManager entityManager;
+    @Autowired PaymentCardRepository cards;
 
     @Test
-    void shouldDecreaseBalanceOnlyForCardOwnerWhenFundsAreSufficient() {
-        PaymentCardEntity card = paymentCardRepository.saveAndFlush(
-                card(7L, "100.00")
-        );
-
-        int updatedRows = paymentCardRepository.decreaseBalance(
-                card.getId(),
-                7L,
-                new BigDecimal("40.00")
-        );
-        entityManager.flush();
-        entityManager.clear();
-
-        PaymentCardEntity updated = paymentCardRepository.findById(card.getId()).orElseThrow();
-        assertEquals(1, updatedRows);
-        assertEquals(0, new BigDecimal("60.00").compareTo(updated.getBalance()));
+    void paymentLockReturnsOnlyAnActiveCardOwnedByTheBuyer() {
+        var active = cards.saveAndFlush(card(7L, true));
+        var inactive = cards.saveAndFlush(card(7L, false));
+        assertEquals(active.getId(), cards.findForPayment(active.getId(), 7L).orElseThrow().getId());
+        assertTrue(cards.findForPayment(active.getId(), 8L).isEmpty());
+        assertTrue(cards.findForPayment(inactive.getId(), 7L).isEmpty());
     }
 
-    @Test
-    void shouldNotDecreaseBalanceWhenFundsAreInsufficient() {
-        PaymentCardEntity card = paymentCardRepository.saveAndFlush(
-                card(7L, "25.00")
-        );
-
-        int updatedRows = paymentCardRepository.decreaseBalance(
-                card.getId(),
-                7L,
-                new BigDecimal("40.00")
-        );
-        entityManager.flush();
-        entityManager.clear();
-
-        PaymentCardEntity unchanged = paymentCardRepository.findById(card.getId()).orElseThrow();
-        assertEquals(0, updatedRows);
-        assertEquals(0, new BigDecimal("25.00").compareTo(unchanged.getBalance()));
-    }
-
-    @Test
-    void shouldNotReturnActiveCardToAnotherUser() {
-        PaymentCardEntity card = paymentCardRepository.saveAndFlush(
-                card(7L, "100.00")
-        );
-
-        assertTrue(
-                paymentCardRepository
-                        .findByIdAndUseridAndActiveTrue(card.getId(), 8L)
-                        .isEmpty()
-        );
-    }
-
-    @Test
-    void shouldReturnRefundToCardOwnerEvenWhenCardIsInactive() {
-        PaymentCardEntity card = card(7L, "60.00");
-        card.setActive(false);
-        card = paymentCardRepository.saveAndFlush(card);
-
-        int updatedRows = paymentCardRepository.increaseBalance(
-                card.getId(),
-                7L,
-                new BigDecimal("40.00")
-        );
-        entityManager.flush();
-        entityManager.clear();
-
-        PaymentCardEntity updated = paymentCardRepository.findById(card.getId()).orElseThrow();
-        assertEquals(1, updatedRows);
-        assertEquals(0, new BigDecimal("100.00").compareTo(updated.getBalance()));
-    }
-
-    private PaymentCardEntity card(Long userId, String balance) {
-        return new PaymentCardEntity(
-                userId,
-                "secret-token-" + userId,
-                "**** **** **** 4242",
-                new BigDecimal(balance)
-        );
+    private PaymentCardEntity card(Long userId, boolean active) {
+        var card = new PaymentCardEntity(userId, java.util.UUID.randomUUID().toString(),
+                "**** **** **** 4242", new BigDecimal("100.00"));
+        card.setActive(active);
+        return card;
     }
 }

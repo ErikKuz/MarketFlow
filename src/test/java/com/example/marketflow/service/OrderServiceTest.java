@@ -27,7 +27,8 @@ import com.example.marketflow.Repository.OrderItemRepository;
 import com.example.marketflow.Repository.OrderRepository;
 import com.example.marketflow.Repository.ProductRepository;
 import com.example.marketflow.cart.CartItemEntity;
-import com.example.marketflow.exception.InsufficientStockException;
+import com.example.marketflow.exception.NotEnoughProductQuantityException;
+import com.example.marketflow.exception.InvalidOrderStateException;
 import com.example.marketflow.exception.NoSelectedCartItemsException;
 import com.example.marketflow.products.ProductEntity;
 import com.example.marketflow.payment.PaymentStatus;
@@ -48,16 +49,16 @@ class OrderServiceTest {
     private OrderItemRepository orderItemRepository;
 
     @Mock
-    private PaymentService paymentService;
+    private com.example.marketflow.marketplace.OrderWorkflowService workflow;
 
     @Mock
-    private com.example.marketflow.marketplace.OrderWorkflowService workflow;
+    private PaymentService paymentService;
 
     @InjectMocks
     private OrderService orderService;
 
     @Test
-    void createOrderDecreasesStockAndDeletesSelectedCartItems() {
+    void createOrderSnapshotsPricesAndDeletesOnlySelectedItemsWithoutReservingStock() {
         Long buyerId = 7L;
         Long productId = 11L;
         Long orderId = 21L;
@@ -68,7 +69,7 @@ class OrderServiceTest {
 
         when(cartItem.getProductId()).thenReturn(productId);
         when(cartItem.getQuantity()).thenReturn(2);
-        when(cartItemRepository.findAllByBuyerIdAndSelectedTrue(buyerId))
+        when(cartItemRepository.findSelectedForCheckout(buyerId))
                 .thenReturn(List.of(cartItem));
 
         when(product.getId()).thenReturn(productId);
@@ -80,7 +81,6 @@ class OrderServiceTest {
         when(product.getUrl()).thenReturn("/images/product.jpg");
         when(productRepository.findAllById(List.of(productId)))
                 .thenReturn(List.of(product));
-        when(productRepository.decreaseStock(productId, 2)).thenReturn(1);
 
         when(orderRepository.save(any(OrderEntity.class))).thenReturn(savedOrder);
         when(savedOrder.getId()).thenReturn(orderId);
@@ -88,14 +88,14 @@ class OrderServiceTest {
         Long result = orderService.createOrder(buyerId);
 
         assertEquals(orderId, result);
-        verify(productRepository).decreaseStock(productId, 2);
+        verify(productRepository, never()).decreaseStock(any(), any());
         verify(orderItemRepository).saveAll(anyList());
         verify(workflow).initialize(org.mockito.ArgumentMatchers.eq(savedOrder), anyList());
-        verify(cartItemRepository).deleteSelectedByBuyerId(buyerId);
+        verify(cartItemRepository).deleteAllInBatch(List.of(cartItem));
     }
 
     @Test
-    void createOrderDoesNotSaveOrderWhenAtomicStockUpdateFails() {
+    void createOrderDoesNotSaveOrderWhenStockIsInsufficient() {
         Long buyerId = 7L;
         Long productId = 11L;
 
@@ -104,29 +104,27 @@ class OrderServiceTest {
 
         when(cartItem.getProductId()).thenReturn(productId);
         when(cartItem.getQuantity()).thenReturn(2);
-        when(cartItemRepository.findAllByBuyerIdAndSelectedTrue(buyerId))
+        when(cartItemRepository.findSelectedForCheckout(buyerId))
                 .thenReturn(List.of(cartItem));
 
         when(product.getId()).thenReturn(productId);
-        when(product.getPrice()).thenReturn(new BigDecimal("25.00"));
-        when(product.getQuantity()).thenReturn(10);
+        when(product.getQuantity()).thenReturn(1);
         when(product.getActive()).thenReturn(true);
         when(productRepository.findAllById(List.of(productId)))
                 .thenReturn(List.of(product));
-        when(productRepository.decreaseStock(productId, 2)).thenReturn(0);
 
         assertThrows(
-                InsufficientStockException.class,
+                NotEnoughProductQuantityException.class,
                 () -> orderService.createOrder(buyerId)
         );
 
         verifyNoInteractions(orderRepository, orderItemRepository);
-        verify(cartItemRepository, never()).deleteSelectedByBuyerId(buyerId);
+        verify(cartItemRepository, never()).deleteAllInBatch(anyList());
     }
 
     @Test
     void createOrderRejectsEmptySelectionBeforeAnyWrite() {
-        when(cartItemRepository.findAllByBuyerIdAndSelectedTrue(7L))
+        when(cartItemRepository.findSelectedForCheckout(7L))
                 .thenReturn(List.of());
 
         assertThrows(
@@ -135,52 +133,29 @@ class OrderServiceTest {
         );
 
         verifyNoInteractions(productRepository, orderRepository, orderItemRepository);
-        verify(cartItemRepository, never()).deleteSelectedByBuyerId(7L);
+        verify(cartItemRepository, never()).deleteAllInBatch(anyList());
     }
 
     @Test
-    void cancelUnpaidOrderRestoresStockWithoutRefund() {
-        OrderEntity order = mock(OrderEntity.class);
-        OrderItemEntity orderItem = mock(OrderItemEntity.class);
-        when(order.getId()).thenReturn(42L);
-        when(order.getStatus()).thenReturn(OrderStatus.CREATED);
-        when(order.getPaymentStatus()).thenReturn(PaymentStatus.NOT_PAID);
-        when(orderRepository.findForPayment(42L, 7L))
-                .thenReturn(java.util.Optional.of(order));
-        when(orderItemRepository.findAllByOrderId(42L))
-                .thenReturn(List.of(orderItem));
-        when(orderItem.getProductId()).thenReturn(11L);
-        when(orderItem.getQuantity()).thenReturn(2);
-        when(productRepository.increaseStock(11L, 2)).thenReturn(1);
-
+    void cancelUnpaidOrderDoesNotTouchCardOrStock() {
+        OrderEntity order = new OrderEntity(7L, OrderStatus.CREATED, new BigDecimal("100.00"));
+        when(orderRepository.findForPayment(42L, 7L)).thenReturn(java.util.Optional.of(order));
         orderService.cancelOrder(42L, 7L);
-
-        verify(productRepository).increaseStock(11L, 2);
-        verify(order).changeStatus(OrderStatus.CANCELLED);
-        verifyNoInteractions(paymentService);
-        verify(workflow).cancelled(order, 7L, "BUYER_CANCELLED");
+        assertEquals(OrderStatus.CANCELLED, order.getStatus());
+        verify(workflow).cancelled(order);
+        verifyNoInteractions(productRepository, orderItemRepository);
     }
 
     @Test
-    void cancelPaidOrderRefundsMoneyAndRestoresStock() {
-        OrderEntity order = mock(OrderEntity.class);
-        OrderItemEntity orderItem = mock(OrderItemEntity.class);
-        when(order.getId()).thenReturn(42L);
-        when(order.getStatus()).thenReturn(OrderStatus.CONFIRMED);
-        when(order.getPaymentStatus()).thenReturn(PaymentStatus.PAID);
-        when(orderRepository.findForPayment(42L, 7L))
-                .thenReturn(java.util.Optional.of(order));
-        when(orderItemRepository.findAllByOrderId(42L))
-                .thenReturn(List.of(orderItem));
-        when(orderItem.getProductId()).thenReturn(11L);
-        when(orderItem.getQuantity()).thenReturn(2);
-        when(productRepository.increaseStock(11L, 2)).thenReturn(1);
-
+    void cancelPaidConfirmedOrderDelegatesToRefund() {
+        OrderEntity order = new OrderEntity(7L, OrderStatus.CREATED, new BigDecimal("100.00"));
+        order.changePaymentStatus(PaymentStatus.PROCESSING);
+        order.changePaymentStatus(PaymentStatus.PAID);
+        order.changeStatus(OrderStatus.CONFIRMED);
+        when(orderRepository.findForPayment(42L, 7L)).thenReturn(java.util.Optional.of(order));
         orderService.cancelOrder(42L, 7L);
-
-        verify(paymentService).refundOrder(order);
-        verify(productRepository).increaseStock(11L, 2);
-        verify(order).changeStatus(OrderStatus.CANCELLED);
+        verify(paymentService).refundOrder(42L, 7L);
+        verifyNoInteractions(productRepository, orderItemRepository, workflow);
     }
 
     @Test
@@ -192,7 +167,7 @@ class OrderServiceTest {
 
         orderService.cancelOrder(42L, 7L);
 
-        verifyNoInteractions(paymentService, productRepository, orderItemRepository);
+        verifyNoInteractions(productRepository, orderItemRepository);
         verify(order, never()).changeStatus(any(OrderStatus.class));
     }
 }

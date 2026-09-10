@@ -67,20 +67,6 @@ class ProductRepositoryTest {
         assertEquals(2, unchanged.getQuantity());
     }
 
-    @Test
-    void shouldRestoreStockAtomically() {
-        ProductEntity saved = productRepository.saveAndFlush(
-                product("Keyboard", 7, true)
-        );
-
-        int updatedRows = productRepository.increaseStock(saved.getId(), 3);
-        entityManager.flush();
-        entityManager.clear();
-
-        ProductEntity updated = productRepository.findById(saved.getId()).orElseThrow();
-        assertEquals(1, updatedRows);
-        assertEquals(10, updated.getQuantity());
-    }
 
     private ProductEntity product(String name, int quantity, boolean active) {
         ProductEntity product = new ProductEntity(

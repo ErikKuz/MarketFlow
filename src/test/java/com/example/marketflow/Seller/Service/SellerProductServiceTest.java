@@ -98,7 +98,7 @@ class SellerProductServiceTest {
         product.setActive(false);
         product.setQuantity(0);
         when(authService.isSeller(7L)).thenReturn(true);
-        when(productRepository.findByIdAndSellerId(20L, 7L))
+        when(productRepository.findForSellerUpdate(20L, 7L))
                 .thenReturn(Optional.of(product));
 
         assertThrows(
@@ -114,7 +114,7 @@ class SellerProductServiceTest {
         ProductEntity product = product();
         BigDecimal originalPrice = product.getPrice();
         when(authService.isSeller(7L)).thenReturn(true);
-        when(productRepository.findByIdAndSellerId(20L, 7L))
+        when(productRepository.findForSellerUpdate(20L, 7L))
                 .thenReturn(Optional.of(product));
 
         sellerProductService.updateProduct(

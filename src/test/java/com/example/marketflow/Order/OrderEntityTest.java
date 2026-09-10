@@ -41,7 +41,8 @@ class OrderEntityTest {
     void shouldRejectTransitionFromCompletedBackToCreated() {
         OrderEntity order = order();
         order.changeStatus(OrderStatus.CONFIRMED);
-        order.changeStatus(OrderStatus.PROCESSING);
+        order.changeStatus(OrderStatus.SELLERSSTARTWORK);
+        order.changeStatus(OrderStatus.SELLERSENDWORKANDSEND);
         order.changeStatus(OrderStatus.COMPLETED);
 
         assertThrows(

@@ -36,10 +36,9 @@ import com.example.marketflow.products.ProductEntity;
 import com.example.marketflow.service.*;
 import com.example.marketflow.userRoles.*;
 
-/** Real service transactions, Flyway schema and PostgreSQL constraints; no enclosing test transaction. */
-@SpringBootTest(properties = {"marketflow.jobs.enabled=false", "spring.jpa.hibernate.ddl-auto=validate",
+/** Проверяет настоящие транзакции сервисов, схему Flyway и ограничения PostgreSQL без общей тестовой транзакции. */
+@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=validate",
         "spring.flyway.enabled=true", "spring.jpa.open-in-view=false"})
-@Import(MarketplacePostgresTest.TimeConfiguration.class)
 @AutoConfigureMockMvc
 @EnabledIfEnvironmentVariable(named = "MARKETFLOW_TEST_POSTGRES_URL", matches = "jdbc:postgresql:.*")
 class MarketplacePostgresTest {
@@ -61,114 +60,73 @@ class MarketplacePostgresTest {
     @Autowired PaymentCardRepository cards;
     @Autowired PaymentTransactionRepository transactions;
     @Autowired WalletAccountRepository wallets;
+
     @Autowired SellerOrderRepository parts;
-    @Autowired SellerApplicationRepository applications;
     @Autowired OrderService orderService;
     @Autowired PaymentService payments;
     @Autowired OrderWorkflowService workflow;
-    @Autowired OrderMaintenanceService maintenance;
-    @Autowired ReturnService returns;
-    @Autowired FinanceService finance;
-    @Autowired AdministrationService administration;
     @Autowired AuthService auth;
-    @Autowired CatalogService catalog;
-    @Autowired AnalyticsService analytics;
     @Autowired JdbcTemplate jdbc;
-    @Autowired MutableClock clock;
     @Autowired MockMvc mvc;
-    private long owner;
-
-    @BeforeEach
-    void prepare() {
-        clock.time = Instant.parse("2026-09-06T10:00:00Z");
-        administration.initializePlatform("test-owner@example.test", "test-password-1234");
-        owner = users.findByEmailIgnoreCase("test-owner@example.test").orElseThrow().getId();
-        administration.changeCommission(owner, money("0.10"));
-    }
 
     @Test
-    void paymentDeliverySettlementAndWithdrawalArePersistedAndIdempotent() {
+    void successfulPaymentAccruesAndDeliveryReleasesSellerAndPlatformFunds() {
         var f = orderFixture();
+        var platformBefore = wallets.findByType(WalletType.PLATFORM).orElseThrow();
+        BigDecimal platformPendingBefore = platformBefore.getPendingBalance();
+        BigDecimal platformAvailableBefore = platformBefore.getAvailableBalance();
+        assertEquals(5, products.findById(f.product).orElseThrow().getQuantity());
+        assertTrue(cart.findAllByBuyerIdAndSelectedTrue(f.buyer).isEmpty());
         pay(f);
-        moneyEquals("90.00", finance.wallet(f.seller).pending());
-        moneyEquals("0.00", finance.wallet(f.seller).available());
-        assertThrows(MarketplaceException.class, () -> finance.requestWithdrawal(f.seller, f.sellerCard, money("1.00"), "too-early"));
+        assertEquals(4, products.findById(f.product).orElseThrow().getQuantity());
+        moneyEquals("900.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
+        assertEquals(3, transactions.findAllByOrderId(f.order).size());
+        moneyEquals("90.00", wallets.findByUserId(f.seller).orElseThrow().getPendingBalance());
+        moneyEquals(
+                platformPendingBefore.add(money("10.00")).toPlainString(),
+                wallets.findByType(WalletType.PLATFORM).orElseThrow().getPendingBalance()
+        );
         deliver(f);
+        workflow.confirmDelivery(f.buyer, f.order, f.part);
         assertEquals(OrderStatus.COMPLETED, orders.findById(f.order).orElseThrow().getStatus());
-        clock.time = clock.time.plus(Duration.ofDays(8));
-        maintenance.settleOne(f.order);
-        maintenance.settleOne(f.order);
-        moneyEquals("90.00", finance.wallet(f.seller).available());
-        moneyEquals("0.00", finance.wallet(f.seller).pending());
-        var request = finance.requestWithdrawal(f.seller, f.sellerCard, money("90.00"), "withdraw-once");
-        assertEquals(request.id(), finance.requestWithdrawal(f.seller, f.sellerCard, money("90.00"), "withdraw-once").id());
-        finance.decideWithdrawal(owner, request.id(), true, "Approved");
-        finance.decideWithdrawal(owner, request.id(), true, "Repeated request");
-        moneyEquals("90.00", cards.findById(f.sellerCard).orElseThrow().getBalance());
-        moneyEquals("0.00", finance.wallet(f.seller).reservedForWithdrawal());
-        assertEquals(1, finance.history(f.seller, 0, 100).content().stream()
-                .filter(t -> t.type() == TransactionType.WITHDRAWAL).count());
+        assertNotNull(orders.findById(f.order).orElseThrow().getDeliveredAt());
+        moneyEquals("0.00", wallets.findByUserId(f.seller).orElseThrow().getPendingBalance());
+        moneyEquals("90.00", wallets.findByUserId(f.seller).orElseThrow().getAvailableBalance());
+        moneyEquals(platformPendingBefore.toPlainString(),
+                wallets.findByType(WalletType.PLATFORM).orElseThrow().getPendingBalance());
+        moneyEquals(platformAvailableBefore.add(money("10.00")).toPlainString(),
+                wallets.findByType(WalletType.PLATFORM).orElseThrow().getAvailableBalance());
+        assertEquals(5, transactions.findAllByOrderId(f.order).size());
+        assertEquals(f.order, pay(f));
+        moneyEquals("900.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
     }
 
     @Test
-    void pendingReturnPreventsSettlementAndApprovedReturnReversesFundsAndStockOnce() {
-        var f = orderFixture();
-        pay(f); deliver(f);
-        var request = returns.request(f.buyer, f.order, "Damaged item");
-        clock.time = clock.time.plus(Duration.ofDays(8));
-        maintenance.settleOne(f.order);
-        moneyEquals("90.00", finance.wallet(f.seller).pending());
-        returns.decide(owner, request.id(), true, true, "Received returned item");
-        returns.decide(owner, request.id(), true, true, "Repeated request");
-        assertEquals(PaymentStatus.REFUNDED, orders.findById(f.order).orElseThrow().getPaymentStatus());
-        assertEquals(OrderStatus.COMPLETED, orders.findById(f.order).orElseThrow().getStatus());
-        assertEquals(5, products.findById(f.product).orElseThrow().getQuantity());
-        moneyEquals("1000.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
-        moneyEquals("0.00", finance.wallet(f.seller).pending());
-        assertEquals(1, transactions.findAllByOrderId(f.order).stream()
-                .filter(t -> t.getType() == TransactionType.REFUND).count());
-        assertEquals(FulfillmentStatus.RETURNED, parts.findById(f.part).orElseThrow().getStatus());
-    }
-
-    @Test
-    void expiryRestoresStockOnceAndRejectsLatePayment() {
-        var f = orderFixture();
-        clock.time = clock.time.plus(Duration.ofMinutes(31));
-        assertThrows(com.example.marketflow.exception.InvalidOrderStateException.class, () -> pay(f));
-        maintenance.expireOne(f.order); maintenance.expireOne(f.order);
-        assertEquals(OrderStatus.CANCELLED, orders.findById(f.order).orElseThrow().getStatus());
-        assertEquals(5, products.findById(f.product).orElseThrow().getQuantity());
-        moneyEquals("1000.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
-        assertEquals(1, workflow.buyerHistory(f.buyer, f.order).stream()
-                .filter(e -> e.action().equals("ORDER_CANCELLED")).count());
-    }
-
-    @Test
-    void concurrentDuplicatePaymentsAreChargedOnceWhileMaintenanceRuns() throws Exception {
+    void concurrentDuplicatePaymentsChargeOnce() throws Exception {
         var f = orderFixture();
         var ready = new CountDownLatch(2);
         var go = new CountDownLatch(1);
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             Future<Long> first = executor.submit(() -> { ready.countDown(); go.await(); return pay(f); });
-            Future<Long> second = executor.submit(() -> { ready.countDown(); go.await(); maintenance.expireOne(f.order); return pay(f); });
+            Future<Long> second = executor.submit(() -> { ready.countDown(); go.await(); return pay(f); });
             assertTrue(ready.await(5, TimeUnit.SECONDS)); go.countDown();
             assertEquals(f.order, first.get(15, TimeUnit.SECONDS));
             assertEquals(f.order, second.get(15, TimeUnit.SECONDS));
         }
-        assertEquals(OrderStatus.CONFIRMED, orders.findById(f.order).orElseThrow().getStatus());
         moneyEquals("900.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
-        moneyEquals("90.00", finance.wallet(f.seller).pending());
         assertEquals(3, transactions.findAllByOrderId(f.order).size());
         assertEquals(4, products.findById(f.product).orElseThrow().getQuantity());
     }
 
     @Test
-    void twoSellersFulfillIndependentlyAndCannotChangeEachOthersParts() {
+    void twoSellersFulfillIndependentlyAndOnlyAllDeliveredCompletesOrder() throws Exception {
         var f = orderFixture();
         long seller2 = createUser((short) 1, (short) 2);
-        wallets.saveAndFlush(new WalletAccountEntity(seller2));
         var extra = product(seller2, "Second item", "20.00");
-        // Prepare one two-seller order through the public creation path.
+        BigDecimal platformPendingBefore = wallets.findByType(WalletType.PLATFORM)
+                .orElseThrow().getPendingBalance();
+        BigDecimal platformAvailableBefore = wallets.findByType(WalletType.PLATFORM)
+                .orElseThrow().getAvailableBalance();
         orderService.cancelOrder(f.order, f.buyer);
         cart.saveAndFlush(new CartItemEntity(f.buyer, f.product));
         cart.saveAndFlush(new CartItemEntity(f.buyer, extra.getId()));
@@ -178,43 +136,126 @@ class MarketplacePostgresTest {
         assertEquals(2, split.size());
         var first = split.stream().filter(p -> p.getSellerId().equals(f.seller)).findFirst().orElseThrow();
         var second = split.stream().filter(p -> p.getSellerId().equals(seller2)).findFirst().orElseThrow();
-        assertThrows(MarketplaceException.class, () -> workflow.sellerTransition(seller2, first.getId(), FulfillmentStatus.ACCEPTED));
+        moneyEquals("880.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
+        assertEquals(4, products.findById(f.product).orElseThrow().getQuantity());
+        assertEquals(4, products.findById(extra.getId()).orElseThrow().getQuantity());
+        moneyEquals("90.00", wallets.findByUserId(f.seller).orElseThrow().getPendingBalance());
+        moneyEquals("18.00", wallets.findByUserId(seller2).orElseThrow().getPendingBalance());
+        moneyEquals(platformPendingBefore.add(money("12.00")).toPlainString(),
+                wallets.findByType(WalletType.PLATFORM).orElseThrow().getPendingBalance());
+        assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET, first.getSettlementStatus());
+        assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET, second.getSettlementStatus());
+        assertEquals(5, transactions.findAllByOrderId(orderId).size());
+        assertThrows(MarketplaceException.class, () -> workflow.sellerTransition(
+                seller2, first.getId(), OBSERFFORSENDBYSELLERPRODUCTSTATUS.PROCESSING));
+        assertThrows(MarketplaceException.class, () -> workflow.sellerDetails(seller2, first.getId()));
+        assertEquals(1, workflow.sellerDetails(f.seller, first.getId()).items().size());
         ship(f.seller, first.getId());
         workflow.confirmDelivery(f.buyer, orderId, first.getId());
-        assertEquals(OrderStatus.PROCESSING, orders.findById(orderId).orElseThrow().getStatus());
+        assertEquals(OrderStatus.SELLERSSTARTWORK, orders.findById(orderId).orElseThrow().getStatus());
+        assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET,
+                parts.findById(first.getId()).orElseThrow().getSettlementStatus());
+        moneyEquals("0.00", wallets.findByUserId(f.seller).orElseThrow().getPendingBalance());
+        moneyEquals("90.00", wallets.findByUserId(f.seller).orElseThrow().getAvailableBalance());
         ship(seller2, second.getId());
+        assertEquals(OrderStatus.SELLERSENDWORKANDSEND, orders.findById(orderId).orElseThrow().getStatus());
         workflow.confirmDelivery(f.buyer, orderId, second.getId());
         assertEquals(OrderStatus.COMPLETED, orders.findById(orderId).orElseThrow().getStatus());
+        assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET,
+                parts.findById(second.getId()).orElseThrow().getSettlementStatus());
+        moneyEquals("0.00", wallets.findByUserId(seller2).orElseThrow().getPendingBalance());
+        moneyEquals("18.00", wallets.findByUserId(seller2).orElseThrow().getAvailableBalance());
+        moneyEquals(platformPendingBefore.toPlainString(),
+                wallets.findByType(WalletType.PLATFORM).orElseThrow().getPendingBalance());
+        moneyEquals(platformAvailableBefore.add(money("12.00")).toPlainString(),
+                wallets.findByType(WalletType.PLATFORM).orElseThrow().getAvailableBalance());
+        assertEquals(9, transactions.findAllByOrderId(orderId).size());
+
+        String withdrawalJson = """
+                {
+                  "cardId": %d,
+                  "amount": 40.00,
+                  "idempotencyKey": "withdraw-rest-%d"
+                }
+                """.formatted(f.sellerCard, orderId);
+        mvc.perform(post("/api/v1/wallet/withdraw")
+                        .with(user(principal(f.buyer))).with(csrf())
+                        .contentType("application/json").content(withdrawalJson))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/wallet/withdraw")
+                        .with(user(principal(f.seller))).with(csrf())
+                        .contentType("application/json").content(withdrawalJson))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/api/v1/wallet/withdraw")
+                        .with(user(principal(f.seller))).with(csrf())
+                        .contentType("application/json").content(withdrawalJson))
+                .andExpect(status().isNoContent());
+        moneyEquals("50.00", wallets.findByUserId(f.seller).orElseThrow().getAvailableBalance());
+        moneyEquals("40.00", cards.findById(f.sellerCard).orElseThrow().getBalance());
+        assertEquals(TransactionType.SELLER_TRANSFERMONEYFROMMAINWALLET,
+                transactions.findByIdempotencyKey("withdraw-rest-" + orderId).orElseThrow().getType());
     }
 
     @Test
-    void sellerApprovalCatalogAndReportsUseRealDatabase() {
-        var request = new RegisterRequest();
-        request.setAccountType(AccountType.SELLER); request.setEmail(UUID.randomUUID() + "@test.example");
-        request.setPassword("password123"); request.setDisplay_name("Seller");
-        auth.register(request);
-        long seller = users.findByEmailIgnoreCase(request.getEmail()).orElseThrow().getId();
-        assertFalse(roles.existsById(new UserRoleId(seller, (short) 2)));
-        assertFalse(wallets.existsByUserId(seller));
-        var application = applications.findByUserId(seller).orElseThrow();
-        administration.decideSeller(owner, application.getId(), true, "Approved");
-        assertTrue(roles.existsById(new UserRoleId(seller, (short) 2)));
-        assertTrue(wallets.existsByUserId(seller));
-        var visible = product(seller, "Visible keyboard", "10.00");
-        var hidden = product(seller, "Hidden keyboard", "20.00");
-        administration.hideProduct(owner, hidden.getId(), true, "Moderation");
-        var result = catalog.search("keyboard", money("1"), money("100"), seller, "priceAsc", 0, 10);
-        assertEquals(1, result.totalElements());
-        assertEquals(visible.getId(), result.content().getFirst().id());
-        var report = analytics.report(owner, Instant.EPOCH, Instant.parse("2100-01-01T00:00:00Z"));
-        assertNotNull(report.netCommission());
-        administration.blockSeller(owner, application.getId(), true, "Blocked");
-        assertEquals(0, catalog.search(null, null, null, seller, "newest", 0, 10).totalElements());
-        assertThrows(MarketplaceException.class, () -> finance.wallet(seller));
+    void unpaidCancellationIsIdempotentAndNeverTouchesStockOrCard() {
+        var f = orderFixture();
+        assertThrows(com.example.marketflow.exception.InvalidOrderStateException.class,
+                () -> workflow.sellerTransition(
+                        f.seller, f.part, OBSERFFORSENDBYSELLERPRODUCTSTATUS.PROCESSING));
+        orderService.cancelOrder(f.order, f.buyer);
+        orderService.cancelOrder(f.order, f.buyer);
+        assertThrows(com.example.marketflow.exception.InvalidOrderStateException.class, () -> pay(f));
+        assertEquals(5, products.findById(f.product).orElseThrow().getQuantity());
+        assertEquals(OBSERFFORSENDBYSELLERPRODUCTSTATUS.CANCELLED,
+                parts.findById(f.part).orElseThrow().getStatus());
+        moneyEquals("1000.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
+        assertTrue(transactions.findAllByOrderId(f.order).isEmpty());
     }
 
     @Test
-    void failedStockReservationRollsBackWholeOrder() {
+    void paymentUsesSnapshotPriceAndPaidCancellationRefundsBeforeFulfillment() {
+        var f = orderFixture();
+        BigDecimal platformPendingBefore = wallets.findByType(WalletType.PLATFORM)
+                .orElseThrow().getPendingBalance();
+        jdbc.update("UPDATE products SET price=999 WHERE id=?", f.product);
+        assertThrows(com.example.marketflow.exception.OrderNotFoundException.class,
+                () -> payments.payOrder(f.order, f.seller, new PayOrderRequest(f.sellerCard, "wrong")));
+        assertThrows(com.example.marketflow.exception.PaymentCardNotFoundException.class,
+                () -> payments.payOrder(f.order, f.buyer, new PayOrderRequest(f.sellerCard, "wrong-card")));
+        pay(f);
+        moneyEquals("900.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
+        orderService.cancelOrder(f.order, f.buyer);
+        moneyEquals("1000.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
+        moneyEquals("0.00", wallets.findByUserId(f.seller).orElseThrow().getPendingBalance());
+        moneyEquals(platformPendingBefore.toPlainString(),
+                wallets.findByType(WalletType.PLATFORM).orElseThrow().getPendingBalance());
+        assertEquals(5, products.findById(f.product).orElseThrow().getQuantity());
+        assertEquals(PaymentStatus.REFUNDED, orders.findById(f.order).orElseThrow().getPaymentStatus());
+        assertEquals(OrderStatus.CANCELLED, orders.findById(f.order).orElseThrow().getStatus());
+        assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.RETURNMONEY,
+                parts.findById(f.part).orElseThrow().getSettlementStatus());
+        assertThrows(com.example.marketflow.exception.InvalidOrderStateException.class,
+                () -> workflow.sellerTransition(
+                        f.seller, f.part, OBSERFFORSENDBYSELLERPRODUCTSTATUS.SELLERSENDPRODUCT));
+    }
+
+    @Test
+    void insufficientBalancePersistsFailedAttemptAndNewKeyCanRetry() {
+        var f = orderFixture();
+        jdbc.update("UPDATE payment_cards SET balance=0 WHERE id=?", f.buyerCard);
+        assertThrows(com.example.marketflow.exception.InsufficientFundsException.class, () -> pay(f));
+        assertEquals(PaymentStatus.FAILED, orders.findById(f.order).orElseThrow().getPaymentStatus());
+        assertEquals(TransactionStatus.FAILED, transactions.findAllByOrderId(f.order).getFirst().getStatus());
+        assertEquals(5, products.findById(f.product).orElseThrow().getQuantity());
+        jdbc.update("UPDATE payment_cards SET balance=1000 WHERE id=?", f.buyerCard);
+        assertThrows(com.example.marketflow.exception.InsufficientFundsException.class, () -> pay(f));
+        assertEquals(f.order, payments.payOrder(f.order, f.buyer, new PayOrderRequest(f.buyerCard, "retry-" + f.order)));
+        assertEquals(4, transactions.findAllByOrderId(f.order).size());
+        moneyEquals("900.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
+    }
+
+    @Test
+    void failedCreationPreservesCartAndDoesNotCreatePartialOrder() {
         long buyer = createUser((short) 1), seller = createUser((short) 2);
         var good = product(seller, "Available", "10.00");
         var absent = product(seller, "No stock", "20.00");
@@ -228,64 +269,89 @@ class MarketplacePostgresTest {
     }
 
     @Test
-    void missingPayoutWalletRollsBackCardDebitLedgerAndPaymentState() {
+    void stockShortageAtPaymentRollsBackEarlierItemDebitAndAllPaymentChanges() {
         var f = orderFixture();
-        wallets.deleteById(wallets.findByUserId(f.seller).orElseThrow().getId());
-        assertThrows(com.example.marketflow.exception.WalletAccountNotFoundException.class, () -> pay(f));
+        orderService.cancelOrder(f.order, f.buyer);
+        var extra = product(f.seller, "Second", "20.00");
+        cart.saveAndFlush(new CartItemEntity(f.buyer, f.product));
+        cart.saveAndFlush(new CartItemEntity(f.buyer, extra.getId()));
+        long orderId = orderService.createOrder(f.buyer);
+        jdbc.update("UPDATE products SET quantity=0 WHERE id=?", extra.getId());
+        assertThrows(com.example.marketflow.exception.InsufficientStockException.class,
+                () -> payments.payOrder(orderId, f.buyer, new PayOrderRequest(f.buyerCard, "stock-" + orderId)));
+        assertEquals(5, products.findById(f.product).orElseThrow().getQuantity());
         moneyEquals("1000.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
-        assertEquals(PaymentStatus.NOT_PAID, orders.findById(f.order).orElseThrow().getPaymentStatus());
-        assertEquals(OrderStatus.CREATED, orders.findById(f.order).orElseThrow().getStatus());
-        assertTrue(transactions.findAllByOrderId(f.order).isEmpty());
+        assertEquals(PaymentStatus.NOT_PAID, orders.findById(orderId).orElseThrow().getPaymentStatus());
+        assertEquals(OrderStatus.CREATED, orders.findById(orderId).orElseThrow().getStatus());
+        assertTrue(transactions.findAllByOrderId(orderId).isEmpty());
     }
 
     @Test
-    void commissionChangeDoesNotAlterRateAlreadySavedWithOrder() {
-        var first = orderFixture();
-        administration.changeCommission(owner, money("0.20"));
-        var second = orderFixture();
-        pay(first); pay(second);
-        moneyEquals("90.00", finance.wallet(first.seller).pending());
-        moneyEquals("80.00", finance.wallet(second.seller).pending());
+    void concurrentOrdersCannotBuyTheSameLastItem() throws Exception {
+        var f = orderFixture();
+        cart.saveAndFlush(new CartItemEntity(f.buyer, f.product));
+        long other = orderService.createOrder(f.buyer);
+        jdbc.update("UPDATE products SET quantity=1 WHERE id=?", f.product);
+        var go = new CountDownLatch(1);
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            var a = pool.submit(() -> { go.await(); return attemptPay(f.order, f); });
+            var b = pool.submit(() -> { go.await(); return attemptPay(other, f); });
+            go.countDown();
+            assertEquals(1, a.get(15, TimeUnit.SECONDS) + b.get(15, TimeUnit.SECONDS));
+        }
+        assertEquals(0, products.findById(f.product).orElseThrow().getQuantity());
+        moneyEquals("900.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
+    }
+    private int attemptPay(long order, Fixture f) {
+        try { payments.payOrder(order, f.buyer, new PayOrderRequest(f.buyerCard, "race-" + order)); return 1; }
+        catch (com.example.marketflow.exception.InsufficientStockException expected) { return 0; }
     }
 
     @Test
-    void workspacePagesRenderAndApiEnforcesRolesCsrfAndLiveAccountStatus() throws Exception {
-        var f = orderFixture(); pay(f); deliver(f);
-        var buyer = principal(f.buyer);
-        var seller = principal(f.seller);
-        var ownerPrincipal = principal(owner);
-        for (var path : new String[]{"/workspace", "/account/orders", "/account/orders/" + f.order + "/workflow",
-                "/workspace/finance", "/workspace/seller-application"}) {
+    void sellerRegistrationGrantsAccessWithoutApplication() {
+        var request = new RegisterRequest();
+        request.setAccountType(AccountType.SELLER); request.setEmail(UUID.randomUUID() + "@test.example");
+        request.setPassword("password123"); request.setDisplay_name("Seller");
+        auth.register(request);
+        long seller = users.findByEmailIgnoreCase(request.getEmail()).orElseThrow().getId();
+        assertTrue(roles.existsById(new UserRoleId(seller, (short) 1)));
+        assertTrue(roles.existsById(new UserRoleId(seller, (short) 2)));
+    }
+
+    @Test
+    void htmlPagesRenderAndRestLifecycleEnforcesRolesOwnershipAndCsrf() throws Exception {
+        var f = orderFixture();
+        var buyer = principal(f.buyer); var seller = principal(f.seller);
+        mvc.perform(get("/api/v1/orders")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/seller/orders").with(user(buyer))).andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/orders/{id}/payment", f.order).with(user(buyer))
+                .contentType("application/json").content("{\"cardId\":" + f.buyerCard + ",\"idempotencyKey\":\"http-key\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/orders/{id}/payment", f.order).with(user(buyer)).with(csrf())
+                .contentType("application/json").content("{\"cardId\":" + f.buyerCard + ",\"idempotencyKey\":\"http-key-" + f.order + "\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/v1/seller/orders/{id}/process", f.part).with(user(seller)).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/api/v1/seller/orders/{id}/ship", f.part).with(user(seller)).with(csrf()))
+                .andExpect(status().isNoContent());
+        for (var path : new String[]{"/account/orders", "/account/orders/" + f.order,
+                "/account/orders/" + f.order + "/workflow", "/account/orders/" + f.order + "/payment"}) {
             mvc.perform(get(path).with(user(buyer))).andExpect(status().isOk())
                     .andExpect(content().contentTypeCompatibleWith("text/html"));
         }
-        for (var path : new String[]{"/workspace/seller/orders", "/workspace/seller/orders/" + f.part, "/workspace/finance"}) {
+        for (var path : new String[]{"/workspace/seller/orders", "/workspace/seller/orders/" + f.part}) {
             mvc.perform(get(path).with(user(seller))).andExpect(status().isOk());
         }
-        for (var path : new String[]{"/workspace/owner", "/workspace/moderation", "/workspace/analytics"}) {
-            mvc.perform(get(path).with(user(ownerPrincipal))).andExpect(status().isOk());
-        }
-        mvc.perform(get("/catalog")).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/orders/{id}/fulfillments", f.order).with(user(principal(createUser((short) 1)))))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/v1/orders/{id}/fulfillments/{partId}/receive", f.order, f.part).with(user(buyer)).with(csrf()))
+                .andExpect(status().isNoContent());
+        assertEquals(OrderStatus.COMPLETED, orders.findById(f.order).orElseThrow().getStatus());
         mvc.perform(get("/api/v1/orders").with(user(buyer)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(f.order));
-        mvc.perform(get("/api/v1/orders")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/v1/owner/users").with(user(buyer))).andExpect(status().isForbidden());
-        mvc.perform(post("/api/v1/orders/{id}/returns", f.order).with(user(buyer))
-                .contentType("application/json").content("{\"reason\":\"Damaged\"}"))
-                .andExpect(status().isForbidden());
-        mvc.perform(post("/api/v1/orders/{id}/returns", f.order).with(user(buyer)).with(csrf())
-                .contentType("application/json").content("{\"reason\":\"\"}"))
-                .andExpect(status().isBadRequest());
-        mvc.perform(post("/account/orders/{id}/returns", f.order).with(user(buyer)).with(csrf())
-                .param("reason", "Damaged item")).andExpect(status().is3xxRedirection());
-        mvc.perform(put("/api/v1/owner/commission").with(user(ownerPrincipal)).with(csrf())
-                .contentType("application/json").content("{\"rate\":0.15}"))
-                .andExpect(status().isNoContent());
-        moneyEquals("0.15", administration.commission(owner));
-        administration.blockUser(owner, f.buyer, true, "Blocked");
+        jdbc.update("UPDATE users SET status='BLOCKED' WHERE id=?", f.buyer);
         mvc.perform(get("/api/v1/orders").with(user(buyer))).andExpect(status().isUnauthorized());
     }
-
     private MarketFlowPrincipal principal(long id) {
         return new MarketFlowPrincipal(users.findById(id).orElseThrow(), roles.findRoleNamesByUserId(id).stream()
                 .map(r -> new SimpleGrantedAuthority("ROLE_" + r)).toList());
@@ -293,7 +359,6 @@ class MarketplacePostgresTest {
 
     private Fixture orderFixture() {
         long buyer = createUser((short) 1), seller = createUser((short) 1, (short) 2);
-        wallets.saveAndFlush(new WalletAccountEntity(seller));
         var product = product(seller, "Keyboard", "100.00");
         cart.saveAndFlush(new CartItemEntity(buyer, product.getId()));
         long order = orderService.createOrder(buyer);
@@ -305,7 +370,14 @@ class MarketplacePostgresTest {
 
     private long createUser(short... assignedRoles) {
         var user = users.saveAndFlush(new UserEntity(UUID.randomUUID() + "@example.test", "test-hash", "Test User"));
-        for (short role : assignedRoles) roles.saveAndFlush(new UserRolesEntity(user.getId(), role));
+        boolean seller = false;
+        for (short role : assignedRoles) {
+            roles.saveAndFlush(new UserRolesEntity(user.getId(), role));
+            seller = seller || role == 2;
+        }
+        if (seller) {
+            wallets.saveAndFlush(WalletAccountEntity.seller(user.getId()));
+        }
         return user.getId();
     }
 
@@ -317,22 +389,11 @@ class MarketplacePostgresTest {
     }
     private void deliver(Fixture f) { ship(f.seller, f.part); workflow.confirmDelivery(f.buyer, f.order, f.part); }
     private void ship(long seller, long part) {
-        workflow.sellerTransition(seller, part, FulfillmentStatus.ACCEPTED);
-        workflow.sellerTransition(seller, part, FulfillmentStatus.PACKING);
-        workflow.sellerTransition(seller, part, FulfillmentStatus.SHIPPED);
+        workflow.sellerTransition(seller, part, OBSERFFORSENDBYSELLERPRODUCTSTATUS.PROCESSING);
+        workflow.sellerTransition(seller, part, OBSERFFORSENDBYSELLERPRODUCTSTATUS.SELLERSENDPRODUCT);
     }
     private static BigDecimal money(String v) { return new BigDecimal(v); }
     private static void moneyEquals(String expected, BigDecimal actual) { assertEquals(0, money(expected).compareTo(actual)); }
     private record Fixture(long buyer, long seller, long product, long order, long part, long buyerCard, long sellerCard) {}
 
-    @TestConfiguration
-    static class TimeConfiguration {
-        @Bean @Primary MutableClock testClock() { return new MutableClock(); }
-    }
-    static class MutableClock extends Clock {
-        volatile Instant time = Instant.parse("2026-09-06T10:00:00Z");
-        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
-        @Override public Clock withZone(ZoneId zone) { return Clock.fixed(time, zone); }
-        @Override public Instant instant() { return time; }
-    }
 }

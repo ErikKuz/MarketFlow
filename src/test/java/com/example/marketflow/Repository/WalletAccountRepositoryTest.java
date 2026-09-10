@@ -1,6 +1,8 @@
 package com.example.marketflow.Repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 
@@ -9,8 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 
 import com.example.marketflow.payment.WalletAccountEntity;
-
-import jakarta.persistence.EntityManager;
+import com.example.marketflow.payment.WalletType;
 
 @DataJpaTest
 class WalletAccountRepositoryTest {
@@ -18,49 +19,33 @@ class WalletAccountRepositoryTest {
     @Autowired
     private WalletAccountRepository walletAccountRepository;
 
-    @Autowired
-    private EntityManager entityManager;
-
     @Test
-    void shouldIncreaseWalletBalanceAtomically() {
-        WalletAccountEntity wallet = walletAccountRepository.saveAndFlush(
-                new WalletAccountEntity(7L)
+    void shouldSaveAndFindSellerWallet() {
+        WalletAccountEntity saved = walletAccountRepository.saveAndFlush(
+                WalletAccountEntity.seller(42L)
         );
 
-        int updatedRows = walletAccountRepository.increaseBalance(
-                7L,
-                new BigDecimal("90.00")
-        );
-        entityManager.flush();
-        entityManager.clear();
-
-        WalletAccountEntity updated = walletAccountRepository
-                .findById(wallet.getId())
+        WalletAccountEntity found = walletAccountRepository
+                .findByUserId(42L)
                 .orElseThrow();
-        assertEquals(1, updatedRows);
-        assertEquals(0, new BigDecimal("90.00").compareTo(updated.getBalance()));
+
+        assertEquals(saved.getId(), found.getId());
+        assertEquals(WalletType.SELLER, found.getType());
+        assertEquals(0, found.getPendingBalance().compareTo(BigDecimal.ZERO));
+        assertEquals(0, found.getAvailableBalance().compareTo(BigDecimal.ZERO));
+        assertTrue(walletAccountRepository.findLockedByUserId(42L).isPresent());
     }
 
     @Test
-    void shouldDecreaseWalletBalanceOnlyWhenFundsAreSufficient() {
-        WalletAccountEntity wallet = walletAccountRepository.saveAndFlush(
-                new WalletAccountEntity(8L)
-        );
-        walletAccountRepository.increaseBalance(8L, new BigDecimal("90.00"));
-        entityManager.flush();
-        entityManager.clear();
+    void shouldSaveAndFindPlatformWallet() {
+        walletAccountRepository.saveAndFlush(WalletAccountEntity.platform());
 
-        int updatedRows = walletAccountRepository.decreaseBalance(
-                8L,
-                new BigDecimal("100.00")
-        );
-        entityManager.flush();
-        entityManager.clear();
-
-        WalletAccountEntity unchanged = walletAccountRepository
-                .findById(wallet.getId())
+        WalletAccountEntity found = walletAccountRepository
+                .findByType(WalletType.PLATFORM)
                 .orElseThrow();
-        assertEquals(0, updatedRows);
-        assertEquals(0, new BigDecimal("90.00").compareTo(unchanged.getBalance()));
+
+        assertNull(found.getUserId());
+        assertEquals(WalletType.PLATFORM, found.getType());
+        assertTrue(walletAccountRepository.findLockedByType(WalletType.PLATFORM).isPresent());
     }
 }

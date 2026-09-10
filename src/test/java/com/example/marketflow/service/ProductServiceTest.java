@@ -36,7 +36,7 @@ public class ProductServiceTest {
 
     @Test
     void shouldThrowProductUnavailableWhenProductIsInactive() {
-        // Arrange
+        // Подготовка
         ProductEntity entity = new ProductEntity(
                 22L,
                 "name",
@@ -52,7 +52,7 @@ public class ProductServiceTest {
         when(productrepository.findById(entity.getId()))
                 .thenReturn(Optional.of(entity));
 
-        // Act + Assert
+        // Выполнение и проверка
         assertThrows(
                 ProductUnavailableException.class,
                 () -> productservice.getProductById(entity.getId())
@@ -66,7 +66,7 @@ public class ProductServiceTest {
     @NullSource
     @ValueSource(ints = {0, -1, -10})
     void shouldThrowProductUnavailableWhenQuantityIsInvalid(Integer quantity) {
-        // Arrange
+        // Подготовка
         Long productId = 20L;
 
         ProductEntity entity = new ProductEntity(
@@ -84,7 +84,7 @@ public class ProductServiceTest {
         when(productrepository.findById(productId))
                 .thenReturn(Optional.of(entity));
 
-        // Act + Assert
+        // Выполнение и проверка
         assertThrows(
                 ProductUnavailableException.class,
                 () -> productservice.getProductById(productId)
@@ -130,7 +130,7 @@ public class ProductServiceTest {
 
     @Test
     void shouldReturnProductDtoWhenProductExistsAndIsAvailable() {
-        // Arrange
+        // Подготовка
         Long productId = 20L;
 
         ProductEntity product = new ProductEntity(
@@ -148,10 +148,10 @@ public class ProductServiceTest {
         when(productrepository.findById(productId))
                 .thenReturn(Optional.of(product));
 
-        // Act
+        // Выполнение
         ProductDto dto = productservice.getProductById(productId);
 
-        // Assert
+        // Проверка
         assertEquals(productId, dto.id());
         assertEquals("dsa", dto.name());
         assertEquals("decr", dto.description());
@@ -174,7 +174,6 @@ public class ProductServiceTest {
 
         ProductNotFoundException exception = assertThrows(ProductNotFoundException.class,()-> productservice.getProductById(productId));
     
-        // assertFalse(exception==null);
 
         assertEquals(
                 "Продукт с таким id:999 не найден",

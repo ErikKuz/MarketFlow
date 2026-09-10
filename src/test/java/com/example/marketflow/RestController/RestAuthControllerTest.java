@@ -47,7 +47,7 @@ public class RestAuthControllerTest {
 
     @Test
     void registerReturns201ForValidRequest() throws Exception {
-        // Act + Assert
+        // Выполнение и проверка
         mockMvc.perform(
                 post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -63,7 +63,7 @@ public class RestAuthControllerTest {
         .andExpect(status().isCreated())
         .andExpect(content().string(""));
 
-        // Проверяем DTO, переданный контроллером в Service
+        // Проверяем DTO, переданный контроллером в сервис
         ArgumentCaptor<RegisterRequest> captor =
                 ArgumentCaptor.forClass(RegisterRequest.class);
 
