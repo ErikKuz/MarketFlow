@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -14,7 +15,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.DecimalMin;
-import com.example.marketflow.exception.RefundNotAvailableException;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -32,11 +32,20 @@ public class PaymentTransactionEntity {//он фиксирует, что ден�
     @Column(name = "order_id")
     private Long orderId;
 
-    @Column(name = "user_id", nullable = false)
+    @Column(name = "user_id")
     private Long userId;
 
+    @Column(name = "seller_order_id")
+    private Long sellerOrderId;
+
+    @Column(name = "wallet_account_id")
+    private Long walletAccountId;
+
+    @Column(name = "related_transaction_id")
+    private Long relatedTransactionId;
+
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
+    @Column(nullable = false, length = 40)
     private TransactionType type;
 
     @DecimalMin("0.01")
@@ -47,21 +56,20 @@ public class PaymentTransactionEntity {//он фиксирует, что ден�
     @Column(nullable = false, length = 30)
     private TransactionStatus status;
 
-    @Column(name = "idempotency_key", nullable = false, unique = true, length = 100)
+    @Column(name = "idempotency_key", nullable = false, unique = true, length = 150)
     private String idempotencyKey;
 
     @Column(name = "payment_card_id")
     private Long paymentCardId;
 
-    @Column(nullable = false)
-    private boolean pending;
-
-    public PaymentTransactionEntity hold() { pending = true; return this; }
-    public void makeAvailable() { pending = false; }
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
 
     public PaymentTransactionEntity(
             Long orderId,
@@ -92,14 +100,32 @@ public class PaymentTransactionEntity {//он фиксирует, что ден�
         this.paymentCardId = paymentCardId;
     }
 
-    public void markRefunded() {
-        if (status != TransactionStatus.COMPLETED) {
-            throw new RefundNotAvailableException(
-                    "Only a completed transaction can be refunded"
-            );
-        }
-
-        status = TransactionStatus.REFUNDED;
-        pending = false;
+    public PaymentTransactionEntity(
+            Long orderId,
+            Long userId,
+            Long sellerOrderId,
+            Long walletAccountId,
+            Long relatedTransactionId,
+            TransactionType type,
+            BigDecimal amount,
+            TransactionStatus status,
+            String idempotencyKey,
+            Long paymentCardId
+    ) {
+        this.orderId = orderId;
+        this.userId = userId;
+        this.sellerOrderId = sellerOrderId;
+        this.walletAccountId = walletAccountId;
+        this.relatedTransactionId = relatedTransactionId;
+        this.type = type;
+        this.amount = amount;
+        this.status = status;
+        this.idempotencyKey = idempotencyKey;
+        this.paymentCardId = paymentCardId;
     }
+
+    public Long getPaymentCardId() {
+        return paymentCardId;
+    }
+
 }

@@ -12,7 +12,7 @@ import com.example.marketflow.Repository.userRoleRepository;
 import com.example.marketflow.User.UserStatus;
 import lombok.RequiredArgsConstructor;
 
-/** Refresh persisted status and roles before authorization, including already-open sessions. */
+/** Обновляет сохранённые статус и роли перед авторизацией, в том числе для уже открытых сессий. */
 @RequiredArgsConstructor
 public class SessionAccountFilter extends OncePerRequestFilter {
     private final UserRepository users;

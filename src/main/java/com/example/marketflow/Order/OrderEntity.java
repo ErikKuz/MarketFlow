@@ -55,36 +55,12 @@ public class OrderEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @Column(name = "payment_expires_at")
-    private Instant paymentExpiresAt;
-
-    @Column(name = "commission_rate", nullable = false, precision = 5, scale = 4)
-    private BigDecimal commissionRate = new BigDecimal("0.10");
-
     @Column(name = "delivered_at")
     private Instant deliveredAt;
 
-    @Column(name = "return_deadline")
-    private Instant returnDeadline;
-
-    @Column(name = "funds_released", nullable = false)
-    private boolean fundsReleased;
-
-    public void configurePayment(Instant expiresAt, BigDecimal rate) {
-        this.paymentExpiresAt = expiresAt;
-        this.commissionRate = rate;
-    }
-
-    public boolean paymentExpired(Instant now) {
-        return paymentExpiresAt != null && !now.isBefore(paymentExpiresAt);
-    }
-
-    public void recordDelivery(Instant deliveredAt, Instant returnDeadline) {
+    public void recordDelivery(Instant deliveredAt) {
         this.deliveredAt = deliveredAt;
-        this.returnDeadline = returnDeadline;
     }
-
-    public void releaseFunds() { this.fundsReleased = true; }
 
     public OrderEntity(
             Long buyerId,
@@ -129,9 +105,10 @@ public class OrderEntity {
         return switch (current) {
             case CREATED -> next == OrderStatus.CONFIRMED
                     || next == OrderStatus.CANCELLED;
-            case CONFIRMED -> next == OrderStatus.PROCESSING
+            case CONFIRMED -> next == OrderStatus.SELLERSSTARTWORK
                     || next == OrderStatus.CANCELLED;
-            case PROCESSING -> next == OrderStatus.COMPLETED;
+            case SELLERSSTARTWORK -> next == OrderStatus.SELLERSENDWORKANDSEND;
+            case SELLERSENDWORKANDSEND -> next == OrderStatus.COMPLETED;
             case COMPLETED, CANCELLED -> false;
         };
     }

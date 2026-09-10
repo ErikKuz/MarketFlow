@@ -253,9 +253,12 @@ public class GlobalRestExceptionHandler {
         if ("productId".equals(field)) {
             code = "INVALID_PRODUCT_ID";
             message = "Product ID must be a positive integer";
-        } else if ("quantity".equals(field) || "amount".equals(field)) {
+        } else if ("quantity".equals(field)) {
             code = "INVALID_QUANTITY";
             message = "Quantity must be greater than or equal to 1";
+        } else if ("amount".equals(field)) {
+            code = "INVALID_AMOUNT";
+            message = "Amount must be greater than zero";
         } else if ("selected".equals(field)) {
             code = "INVALID_SELECTION";
             message = "Selected value is required";
@@ -480,17 +483,12 @@ public class GlobalRestExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
-    @ExceptionHandler({
-            InvalidOrderStateException.class,
-            RefundNotAvailableException.class
-    })
+    @ExceptionHandler(InvalidOrderStateException.class)
     public ResponseEntity<ApiError> handleInvalidOrderState(
             RuntimeException exception,
             HttpServletRequest request
     ) {
-        String code = exception instanceof RefundNotAvailableException
-                ? "REFUND_NOT_AVAILABLE"
-                : "INVALID_ORDER_STATE";
+        String code = "INVALID_ORDER_STATE";
 
         ApiError error = new ApiError(
                 Instant.now(),
@@ -505,45 +503,12 @@ public class GlobalRestExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
-    @ExceptionHandler(OrderCancellationFailedException.class)
-    public ResponseEntity<ApiError> handleOrderCancellationFailed(
-            OrderCancellationFailedException exception,
-            HttpServletRequest request
-    ) {
-        ApiError error = new ApiError(
-                Instant.now(),
-                HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                "ORDER_CANCELLATION_FAILED",
-                "Order cancellation could not be completed",
-                request.getRequestURI(),
-                List.of(),
-                null
-        );
-
-        return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(error);
-    }
-
-    @ExceptionHandler({
-            WalletAccountNotFoundException.class,
-            OwnerWalletAccountNotFoundException.class
-    })
-    public ResponseEntity<ApiError> handlePaymentProcessingFailure(
-            RuntimeException exception,
-            HttpServletRequest request
-    ) {
-        ApiError error = new ApiError(
-                Instant.now(),
-                HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                "PAYMENT_PROCESSING_FAILED",
-                "Payment could not be processed",
-                request.getRequestURI(),
-                List.of(),
-                null
-        );
-
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> handleDataConflict(HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiError(
+                Instant.now(), 409, "DATA_CONFLICT",
+                "Request conflicts with existing data; check the order before retrying",
+                request.getRequestURI(), List.of(), null));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

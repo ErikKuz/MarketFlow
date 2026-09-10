@@ -13,6 +13,10 @@ import com.example.marketflow.cart.CartItemEntity;
 
 @Repository
 public interface CartItemRepository extends JpaRepository<CartItemEntity, Long> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select i from CartItemEntity i where i.buyerId = :buyerId and i.selected = true order by i.productId")
+    List<CartItemEntity> findSelectedForCheckout(@Param("buyerId") Long buyerId);
+
     List<CartItemEntity> findAllByBuyerId(Long buyerId);
     Optional<CartItemEntity> findByIdAndBuyerId(Long id, Long buyerId);
     List<CartItemEntity> findAllByBuyerIdAndSelectedTrue(Long buyerId);

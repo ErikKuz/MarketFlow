@@ -28,7 +28,7 @@ public class SessionAuthenticationService {
     //Это встроенный интерфейс Spring Security для сохранения и последующего восстановления SecurityContext.
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
     //Это встроенный интерфейс Spring Security, который выполняет действия с сессией после успешной аутентификации.
-    //Его задача — защита от атаки session fixation.
+    //Его задача — защита от атаки с фиксацией идентификатора сессии.
     //До входа:
         // JSESSIONID = old123
 
@@ -60,8 +60,8 @@ public class SessionAuthenticationService {
 
             MarketFlowPrincipal principal = (MarketFlowPrincipal) authentication.getPrincipal();
 
-            // Kept temporarily for the existing MVC and REST controllers.
-            // Access to protected endpoints is still decided by Spring Security.
+            // Временно оставлено для существующих MVC- и REST-контроллеров.
+            // Доступ к защищённым адресам по-прежнему определяет Spring Security.
             httpRequest.getSession().setAttribute("userId", principal.getUserId());
 
             return principal;

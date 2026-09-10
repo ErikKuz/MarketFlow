@@ -89,10 +89,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
                         .requestMatchers("/api/v1/seller/**").hasRole("SELLER")
-                        .requestMatchers("/api/v1/owner/**").hasRole("OWNER")
-                        .requestMatchers("/api/v1/moderation/**").hasAnyRole("SELLER_MODERATOR", "OWNER")
-                        .requestMatchers("/api/v1/analytics/**").hasAnyRole("ANALYST", "OWNER")
-                        .requestMatchers("/api/v1/finance/**").authenticated()
+                        .requestMatchers("/api/v1/wallet/**").hasRole("SELLER")
                         .requestMatchers("/api/v1/auth/logout").authenticated()
                         .requestMatchers("/api/v1/account/**").authenticated()
                         .requestMatchers(
@@ -133,7 +130,6 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
                                 "/",
-                                "/catalog",
                                 "/login",
                                 "/register",
                                 "/css/**",
@@ -142,9 +138,6 @@ public class SecurityConfig {
                                 "/actuator/health"
                         ).permitAll()
                         .requestMatchers("/seller/**").hasRole("SELLER")
-                        .requestMatchers("/workspace/owner/**").hasRole("OWNER")
-                        .requestMatchers("/workspace/moderation/**").hasAnyRole("SELLER_MODERATOR", "OWNER")
-                        .requestMatchers("/workspace/analytics/**").hasAnyRole("ANALYST", "OWNER")
                         .requestMatchers("/workspace/seller/**").hasRole("SELLER")
                         .requestMatchers("/account/**", "/Buyer/**").hasRole("BUYER")
                         .anyRequest().authenticated()

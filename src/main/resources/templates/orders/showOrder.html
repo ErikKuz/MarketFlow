@@ -35,7 +35,8 @@
             <div class="data-value" th:switch="${order.status.name()}">
                 <span class="status-badge order-status-created" th:case="'CREATED'">Создан</span>
                 <span class="status-badge order-status-confirmed" th:case="'CONFIRMED'">Подтверждён</span>
-                <span class="status-badge order-status-processing" th:case="'PROCESSING'">В обработке</span>
+                <span class="status-badge order-status-processing" th:case="'SELLERSSTARTWORK'">В обработке</span>
+                <span class="status-badge order-status-processing" th:case="'SELLERSENDWORKANDSEND'">Передан в доставку</span>
                 <span class="status-badge order-status-completed" th:case="'COMPLETED'">Завершён</span>
                 <span class="status-badge order-status-cancelled" th:case="'CANCELLED'">Отменён</span>
                 <span class="status-badge" th:case="*" th:text="${order.status}">Статус</span>
@@ -143,14 +144,15 @@
         <strong th:text="${order.totalPrice + ' ₽'}">0.00 ₽</strong>
     </section>
     <section class="order-payment-actions" aria-label="Оплата заказа">
+        <a class="button button-secondary" th:href="@{/account/orders/{id}/workflow(id=${order.id})}">Доставка заказа</a>
         <a class="button button-primary"
-           th:if="${order.paymentStatus.name() == 'NOT_PAID' or order.paymentStatus.name() == 'FAILED'}"
+           th:if="${order.status.name() == 'CREATED' and (order.paymentStatus.name() == 'NOT_PAID' or order.paymentStatus.name() == 'FAILED')}"
            th:href="@{/account/orders/{id}/payment(id=${order.id})}"
            href="/account/orders/1/payment">
             Перейти к оплате
         </a>
 
-        <form th:if="${(order.status.name() == 'CREATED' and (order.paymentStatus.name() == 'NOT_PAID' or order.paymentStatus.name() == 'FAILED')) or (order.status.name() == 'CONFIRMED' and order.paymentStatus.name() == 'PAID')}"
+        <form th:if="${(order.status.name() == 'CREATED' and (order.paymentStatus.name() == 'NOT_PAID' or order.paymentStatus.name() == 'FAILED'))}"
               th:action="@{/account/orders/{id}/cancel(id=${order.id})}"
               method="post">
             <button class="button button-secondary" type="submit">

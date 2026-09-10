@@ -1,11 +1,13 @@
 package com.example.marketflow.payment;
 
+/** Назначение операции с виртуальными деньгами внутри MarketFlow. */
 public enum TransactionType {
     PAYMENT,
-    SELLER_PAYOUT,
+    SELLER_PENDINGWALLET,
     PLATFORM_COMMISSION,
-    REFUND,
-    SELLER_PAYOUT_REVERSAL,//возврат пользователю
-    PLATFORM_COMMISSION_REVERSAL,//возврат пользователю
-    WITHDRAWAL
+    SELLER_MAINWALLET,
+    SELLER_TRANSFERMONEYFROMMAINWALLET,
+    RETURNMONEY,
+    SELLER_RETURNMONEY,
+    PLATFORM_RETURMONEY
 }

@@ -6,12 +6,10 @@
 <div class="panel"><h2 th:text="${'Часть #' + details.fulfillment.id + ' заказа #' + details.fulfillment.orderId}"></h2>
 <p>Статус: <b th:text="${details.fulfillment.status}"></b> · Оплата: <span th:text="${details.paymentStatus}"></span></p>
 <form th:if="${details.paymentStatus.name() == 'PAID' and details.fulfillment.status.name() == 'NEW'}"
-th:action="@{/workspace/seller/orders/{id}/accept(id=${details.fulfillment.id})}" method="post"><button>Принять заказ</button></form>
-<form th:if="${details.fulfillment.status.name() == 'ACCEPTED'}"
-th:action="@{/workspace/seller/orders/{id}/packing(id=${details.fulfillment.id})}" method="post"><button>Начать сборку</button></form>
-<form th:if="${details.fulfillment.status.name() == 'PACKING'}"
+th:action="@{/workspace/seller/orders/{id}/process(id=${details.fulfillment.id})}" method="post"><button>Начать сборку</button></form>
+<form th:if="${details.fulfillment.status.name() == 'PROCESSING'}"
 th:action="@{/workspace/seller/orders/{id}/ship(id=${details.fulfillment.id})}" method="post"><button>Передать в доставку</button></form>
-<p th:if="${details.fulfillment.status.name() == 'SHIPPED'}" class="muted">Ожидается подтверждение получения покупателем.</p></div>
+<p th:if="${details.fulfillment.status.name() == 'SELLERSENDPRODUCT'}" class="muted">Ожидается подтверждение получения покупателем.</p></div>
 <div class="table-scroll"><table><thead><tr><th>Товар</th><th>Цена при покупке</th><th>Количество</th><th>Сумма</th></tr></thead><tbody>
 <tr th:each="i : ${details.items}"><td th:text="${i.productName}"></td><td th:text="${i.unitPrice}"></td><td th:text="${i.quantity}"></td><td th:text="${i.totalPrice}"></td></tr></tbody></table></div>
-<h2>История</h2><div th:replace="~{workspace/fragments :: audit(${details.history})}"></div></main></body></html>
+</main></body></html>

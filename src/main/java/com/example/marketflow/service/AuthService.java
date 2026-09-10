@@ -4,6 +4,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.marketflow.AccountType;
 import com.example.marketflow.Repository.UserRepository;
 import com.example.marketflow.Repository.WalletAccountRepository;
 import com.example.marketflow.Repository.userRoleRepository;
@@ -29,9 +30,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final userRoleRepository repository;
-    private final WalletAccountRepository WAR;
-    private final com.example.marketflow.marketplace.SellerApplicationRepository sellerApplications;
-    private final java.time.Clock clock;
+    private final WalletAccountRepository walletAccountRepository;
 
     @Transactional
     public void register(RegisterRequest userDto) {
@@ -52,8 +51,19 @@ public class AuthService {
         );
 
         repository.save(new UserRolesEntity(savedUser.getId(), (short) 1));
-        if (userDto.getAccountType() == com.example.marketflow.AccountType.SELLER) {
-            sellerApplications.save(new com.example.marketflow.marketplace.SellerApplicationEntity(savedUser.getId(), clock.instant()));
+        if (userDto.getAccountType() == AccountType.SELLER) {
+            repository.save(
+                    new UserRolesEntity(
+                            savedUser.getId(),
+                            (short) 2
+                    )
+            );
+
+            walletAccountRepository.save(
+                    WalletAccountEntity.seller(
+                            savedUser.getId()
+                    )
+            );
         }
     }
 

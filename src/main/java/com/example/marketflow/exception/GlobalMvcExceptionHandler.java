@@ -134,20 +134,7 @@ public class GlobalMvcExceptionHandler {
         return "error";
     }
 
-    @ExceptionHandler(WalletAccountNotFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    public String handleWalletAccountNotFound(
-            WalletAccountNotFoundException exception,
-            Model model
-    ) {
-        model.addAttribute("message", exception.getMessage());
-        return "error";
-    }
-
-    @ExceptionHandler({
-            InvalidOrderStateException.class,
-            RefundNotAvailableException.class
-    })
+    @ExceptionHandler(InvalidOrderStateException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public String handleInvalidOrderState(
             RuntimeException exception,
@@ -157,23 +144,10 @@ public class GlobalMvcExceptionHandler {
         return "error";
     }
 
-    @ExceptionHandler(OrderCancellationFailedException.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public String handleOrderCancellationFailed(
-            OrderCancellationFailedException exception,
-            Model model
-    ) {
-        model.addAttribute("message", exception.getMessage());
-        return "error";
-    }
-
-    @ExceptionHandler(OwnerWalletAccountNotFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    public String handleOwnerWalletAccountNotFound(
-            OwnerWalletAccountNotFoundException exception,
-            Model model
-    ) {
-        model.addAttribute("message", exception.getMessage());
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public String handleDataConflict(Model model) {
+        model.addAttribute("message", "Запрос конфликтует с сохранёнными данными. Проверьте состояние заказа перед повторной попыткой.");
         return "error";
     }
 }

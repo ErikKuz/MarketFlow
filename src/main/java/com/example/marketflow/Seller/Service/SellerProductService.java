@@ -48,7 +48,7 @@ public class SellerProductService {
 
         requireSeller(SellerId);
 
-        ProductEntity entity=repository.findByIdAndSellerId(productId, SellerId).orElseThrow(() -> new ProductNotFoundException(productId));
+        ProductEntity entity=repository.findForSellerUpdate(productId, SellerId).orElseThrow(() -> new ProductNotFoundException(productId));
         if(dto.getName()!=null)entity.setName(dto.getName());
         if(dto.getPrice()!=null)entity.setPrice(dto.getPrice());
         if(dto.getDescription()!=null)entity.setDescription(dto.getDescription());
@@ -60,7 +60,7 @@ public class SellerProductService {
 
         requireSeller(SellerId);
 
-        ProductEntity entity=repository.findByIdAndSellerId(ProductId,SellerId).
+        ProductEntity entity=repository.findForSellerUpdate(ProductId,SellerId).
         orElseThrow(()->new ProductNotFoundException(ProductId));
         entity.setActive(false);
     }
@@ -70,7 +70,7 @@ public class SellerProductService {
         
         requireSeller(SellerId);
 
-        ProductEntity entity=repository.findByIdAndSellerId(ProductId,SellerId)
+        ProductEntity entity=repository.findForSellerUpdate(ProductId,SellerId)
         .orElseThrow(()->new ProductNotFoundException(ProductId));
         if (entity.getQuantity() == null || entity.getQuantity() <= 0) {
             throw new ProductUnavailableException();
@@ -88,7 +88,7 @@ public class SellerProductService {
             throw new InvalidQuantityException(amount);
         }
 
-        ProductEntity entity=repository.findByIdAndSellerId(productId, SellerId).orElseThrow(
+        ProductEntity entity=repository.findForSellerUpdate(productId, SellerId).orElseThrow(
             ()->new ProductNotFoundException(productId)
         );
         

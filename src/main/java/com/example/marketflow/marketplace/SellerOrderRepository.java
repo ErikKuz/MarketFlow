@@ -10,5 +10,11 @@ public interface SellerOrderRepository extends JpaRepository<SellerOrderEntity, 
     @Query("select s.orderId from SellerOrderEntity s where s.id = :id")
     Optional<Long> findOrderId(@Param("id") Long id);
     List<SellerOrderEntity> findAllByOrderIdOrderBySellerId(Long orderId);
-    Page<SellerOrderEntity> findAllBySellerIdOrderByCreatedAtDescIdDesc(Long sellerId, Pageable pageable);
+    @Query("""
+            select s from SellerOrderEntity s, OrderEntity o
+            where s.orderId = o.id and s.sellerId = :sellerId
+            and o.paymentStatus = com.example.marketflow.payment.PaymentStatus.PAID
+            order by s.createdAt desc, s.id desc
+            """)
+    Page<SellerOrderEntity> findPaidBySellerId(@Param("sellerId") Long sellerId, Pageable pageable);
 }

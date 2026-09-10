@@ -3,7 +3,8 @@ package com.example.marketflow.Order;
 public enum OrderStatus {
     CREATED,
     CONFIRMED,
-    PROCESSING,
+    SELLERSSTARTWORK,
+    SELLERSENDWORKANDSEND,
     COMPLETED,
     CANCELLED
 }

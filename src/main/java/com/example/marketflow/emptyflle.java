@@ -5,15 +5,16 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class emptyflle{
-    public static void main(String[] args){
-        List<String>list1=new ArrayList<>(List.of("Alicve","sda","dsa"));
-        list1.add("Bob");
-        System.out.println(list1.get(1));
+    public static void main(String[] args) {
+        final int x;
 
-        List<String>list2=new LinkedList<>(List.of("12sd","Alicve","sda","dsa"));
-        System.out.println(list2.get(1));
-        String key="A";
-        String k="A";
-        System.out.println(k.equals(key));
+        if (args.length > 0) {
+            x = 10;
+        } else {
+            x = 20;
+        }
+
+        Runnable r = () -> System.out.println(x);
+        r.run();
     }
 }

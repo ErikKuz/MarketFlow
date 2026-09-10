@@ -1,19 +1,13 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{workspace/fragments :: head('Доставка и история заказа')}"></head>
+<head th:replace="~{workspace/fragments :: head('Доставка заказа')}"></head>
 <body><nav th:replace="~{workspace/fragments :: nav}"></nav>
-<main class="workspace"><h1>Доставка и история заказа</h1>
+<main class="workspace"><h1>Доставка заказа</h1>
 <p><a th:href="@{/account/orders/{id}(id=${order.id})}">← Состав заказа и оплата</a></p>
 <div class="panel"><h2 th:text="${'Заказ #' + order.id}"></h2><p><span th:text="${order.status}"></span> · Оплата: <span th:text="${order.paymentStatus}"></span> · <b th:text="${order.totalPrice + ' ₽'}"></b></p>
-<p th:if="${summary.returnDeadline != null}">Заявку на возврат можно подать до <span th:text="${summary.returnDeadline}"></span> (UTC).</p></div>
+</div>
 <h2>Части заказа по продавцам</h2><div class="grid"><section class="card" th:each="p : ${parts}">
 <h3 th:text="${'Продавец #' + p.sellerId}"></h3><p th:text="${p.status}"></p><p th:text="${p.totalAmount + ' ₽'}"></p>
-<form th:if="${p.status.name() == 'SHIPPED'}" th:action="@{/account/orders/{id}/fulfillments/{partId}/receive(id=${order.id},partId=${p.id})}" method="post">
+<form th:if="${p.status.name() == 'SELLERSENDPRODUCT' and order.paymentStatus.name() == 'PAID'}" th:action="@{/account/orders/{id}/fulfillments/{partId}/receive(id=${order.id},partId=${p.id})}" method="post">
 <button type="submit">Подтвердить получение</button></form></section></div>
-<section class="panel" th:if="${returnRequest != null}"><h2>Заявка на возврат</h2><p th:text="${returnRequest.status}"></p>
-<p th:text="${returnRequest.reason}"></p><p th:text="${returnRequest.decisionReason}"></p></section>
-<section class="panel" th:if="${canReturn and returnRequest == null}"><h2>Вернуть полученный заказ</h2>
-<p class="muted">Возврат оформляется на весь заказ после получения всех частей. Владелец рассматривает заявку и подтверждает приём товара.</p>
-<form th:action="@{/account/orders/{id}/returns(id=${order.id})}" method="post">
-<label>Причина<textarea name="reason" maxlength="1000" required></textarea></label><button>Подать заявку</button></form></section>
-<h2>История изменений</h2><div th:replace="~{workspace/fragments :: audit(${history})}"></div></main></body></html>
+</main></body></html>
