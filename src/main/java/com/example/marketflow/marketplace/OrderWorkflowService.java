@@ -20,10 +20,10 @@ import com.example.marketflow.Repository.PaymentTransactionRepository;
 import com.example.marketflow.Repository.WalletAccountRepository;
 import com.example.marketflow.exception.InvalidOrderStateException;
 import com.example.marketflow.exception.OrderNotFoundException;
-import com.example.marketflow.marketplace.MarketplaceViews.OrderSummary;
 import com.example.marketflow.marketplace.MarketplaceViews.PageView;
 import com.example.marketflow.marketplace.MarketplaceViews.SellerOrderDetails;
-import com.example.marketflow.marketplace.MarketplaceViews.SellerOrderView;
+import com.example.marketflow.marketplace.MarketplaceViews.SellerOrderSpecific;
+import com.example.marketflow.marketplace.MarketplaceViews.ShortInfoAboutMyOrderInListOrder;
 import com.example.marketflow.payment.PaymentStatus;
 import com.example.marketflow.payment.PaymentTransactionEntity;
 import com.example.marketflow.payment.TransactionStatus;
@@ -44,6 +44,7 @@ public class OrderWorkflowService {
     private final MarketplaceAccess access;
     private final Clock clock;
 
+    //группирует товары заказа по продавцам,считает для кажвыго сумму
     @Transactional
     public void initialize(OrderEntity order, List<OrderItemEntity> orderItems) {
         Map<Long, BigDecimal> totals = orderItems.stream().collect(Collectors.toMap(
@@ -52,48 +53,50 @@ public class OrderWorkflowService {
                 SOR.save(new SellerOrderEntity(order.getId(), seller, amount, clock.instant())));
     }
 
+    //переводит все части указанного заказа в статус CANCELLED
     @Transactional
     public void cancelled(OrderEntity order) {
         SOR.findAllByOrderIdOrderBySellerId(order.getId())
                 .forEach(part -> part.transition(OBSERFFORSENDBYSELLERPRODUCTSTATUS.CANCELLED, clock.instant()));
     }
 
+    //проверяет роль покупателя и возвращает страницу его заказов
     @Transactional(readOnly = true)
-    public PageView<OrderSummary> buyerOrders(Long buyerId, int page, int size) {
-        access.require(buyerId, "BUYER");
+    public PageView<ShortInfoAboutMyOrderInListOrder> buyerOrders(Long buyerId, int page, int size) {
+        access.checkonRights(buyerId, "BUYER");
         return PageView.of(OR.findAllByBuyerIdOrderByCreatedAtDescIdDesc(
-                buyerId, MarketplaceAccess.page(page, size)).map(OrderSummary::of));
+                buyerId, MarketplaceAccess.page(page, size)).map(ShortInfoAboutMyOrderInListOrder::of));
     }
 
     @Transactional(readOnly = true)
-    public List<SellerOrderView> buyerParts(Long buyerId, Long orderId) {
+    public List<SellerOrderSpecific> buyerParts(Long buyerId, Long orderId) {
         buyerSummary(buyerId, orderId);
-        return SOR.findAllByOrderIdOrderBySellerId(orderId).stream().map(SellerOrderView::of).toList();
+        return SOR.findAllByOrderIdOrderBySellerId(orderId).stream().map(SellerOrderSpecific::of).toList();
     }
 
     @Transactional(readOnly = true)
-    public OrderSummary buyerSummary(Long buyerId, Long orderId) {
-        access.require(buyerId, "BUYER");
-        return OR.findByIdAndBuyerId(orderId, buyerId).map(OrderSummary::of)
+    public ShortInfoAboutMyOrderInListOrder buyerSummary(Long buyerId, Long orderId) {
+        access.checkonRights(buyerId, "BUYER");
+        return OR.findByIdAndBuyerId(orderId, buyerId).map(ShortInfoAboutMyOrderInListOrder::of)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
     }
 
     @Transactional(readOnly = true)
-    public PageView<SellerOrderView> SOR(Long sellerId, int page, int size) {
-        access.require(sellerId, "SELLER");
+    public PageView<SellerOrderSpecific> SOR(Long sellerId, int page, int size) {
+        access.checkonRights(sellerId, "SELLER");
         return PageView.of(SOR.findPaidBySellerId(
-                sellerId, MarketplaceAccess.page(page, size)).map(SellerOrderView::of));
+                sellerId, MarketplaceAccess.page(page, size)).map(SellerOrderSpecific::of));
     }
 
     @Transactional(readOnly = true)
     public SellerOrderDetails sellerDetails(Long sellerId, Long partId) {
-        access.require(sellerId, "SELLER");
+        access.checkonRights(sellerId, "SELLER");
         var part = sellerPart(sellerId, partId);
         var order = OR.findById(part.getOrderId()).orElseThrow();
         var detailItems = OIR.findAllByOrderIdAndSellerId(order.getId(), sellerId).stream()
                 .map(i -> new OrderItemDto(i.getProductId(), i.getSellerId(), i.getProductName(),
                         i.getUnitPrice(), i.getQuantity(), i.getTotalPrice(), i.getImageUrl())).toList();
-        return new SellerOrderDetails(SellerOrderView.of(part), order.getPaymentStatus(), detailItems);
+        return new SellerOrderDetails(SellerOrderSpecific.of(part), order.getPaymentStatus(), detailItems);
     }
 
     private SellerOrderEntity sellerPart(Long sellerId, Long partId) {
@@ -103,7 +106,7 @@ public class OrderWorkflowService {
 
     @Transactional
     public void sellerTransition(Long sellerId, Long partId, OBSERFFORSENDBYSELLERPRODUCTSTATUS next) {
-        access.require(sellerId, "SELLER");
+        access.checkonRights(sellerId, "SELLER");
         var orderId = SOR.findOrderId(partId)
                 .orElseThrow(() -> MarketplaceException.missing("Seller order not found"));
         // Блокируем заказ до загрузки его частей, чтобы параллельные действия продавцов не потеряли обновления статуса.
@@ -120,10 +123,10 @@ public class OrderWorkflowService {
         if (part.getStatus() == next) return;
         part.transition(next, clock.instant());
         if (order.getStatus() == OrderStatus.CONFIRMED) order.changeStatus(OrderStatus.SELLERSSTARTWORK);
-        updateShippingStatus(order);
+        CheckSELLERSENDWORKANDSEND(order);
     }
 
-    private void updateShippingStatus(OrderEntity order) {
+    private void CheckSELLERSENDWORKANDSEND(OrderEntity order) {
         var parts = SOR.findAllByOrderIdOrderBySellerId(order.getId());
         boolean allSent = !parts.isEmpty() && parts.stream().allMatch(part ->
                 part.getStatus() == OBSERFFORSENDBYSELLERPRODUCTSTATUS.SELLERSENDPRODUCT
@@ -134,8 +137,8 @@ public class OrderWorkflowService {
     }
 
     @Transactional
-    public void confirmDelivery(Long buyerId, Long orderId, Long partId) {
-        access.require(buyerId, "BUYER");
+    public void ConfirmThatUSERGETPRODUCTBySellerID(Long buyerId, Long orderId, Long partId) {
+        access.checkonRights(buyerId, "BUYER");
         var order = OR.findForPayment(orderId, buyerId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
         var part = SOR.findById(partId).filter(p -> p.getOrderId().equals(orderId))
@@ -149,8 +152,8 @@ public class OrderWorkflowService {
             throw new InvalidOrderStateException("The order is not being delivered");
         }
         part.transition(OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT, clock.instant());
-        releaseSettlement(part);
-        updateShippingStatus(order);
+        TrounseferMoneyFromPendingInMainWallet(part);
+        CheckSELLERSENDWORKANDSEND(order);
         if (SOR.findAllByOrderIdOrderBySellerId(orderId).stream()
                 .allMatch(p -> p.getStatus() == OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT)) {
             order.changeStatus(OrderStatus.COMPLETED);
@@ -158,7 +161,7 @@ public class OrderWorkflowService {
         }
     }
 
-    private void releaseSettlement(SellerOrderEntity part) {
+    private void TrounseferMoneyFromPendingInMainWallet(SellerOrderEntity part) {
         if (part.getSettlementStatus() != OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET) {
             throw new InvalidOrderStateException(
                     "Only pending settlement can be released"
@@ -180,7 +183,7 @@ public class OrderWorkflowService {
                 TransactionType.SELLER_PENDINGWALLET
         );
         sellerWallet.releasePending(part.getSellerAmount());
-        saveRelease(part, sellerWallet, part.getSellerId(), part.getSellerAmount(), sellerAccrual.getId(), "seller");
+        saveOperationTrounseferMoneyFromPendingInMainWalletInPaymentTransaction(part, sellerWallet, part.getSellerId(), part.getSellerAmount(), sellerAccrual.getId(), "seller");
 
         if (part.getCommissionAmount().signum() > 0) {
             PaymentTransactionEntity platformAccrual = requireSettlementTransaction(
@@ -189,7 +192,7 @@ public class OrderWorkflowService {
                     TransactionType.PLATFORM_COMMISSION
             );
             platformWallet.releasePending(part.getCommissionAmount());
-            saveRelease(part, platformWallet, null, part.getCommissionAmount(), platformAccrual.getId(), "platform");
+            saveOperationTrounseferMoneyFromPendingInMainWalletInPaymentTransaction(part, platformWallet, null, part.getCommissionAmount(), platformAccrual.getId(), "platform");
         }
 
         part.markSettlementAvailable();
@@ -210,7 +213,7 @@ public class OrderWorkflowService {
                 ));
     }
 
-    private void saveRelease(
+    private void saveOperationTrounseferMoneyFromPendingInMainWalletInPaymentTransaction(
             SellerOrderEntity part,
             WalletAccountEntity wallet,
             Long userId,

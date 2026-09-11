@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.marketflow.exception.AuthenticationRequiredException;
-import com.example.marketflow.payment.WithdrawRequest;
+import com.example.marketflow.payment.TrounsferMoneyOnSellerCard;
 import com.example.marketflow.service.WalletService;
 
 import jakarta.servlet.http.HttpSession;
@@ -22,8 +22,8 @@ public class RestWalletController {
     private final WalletService walletService;
 
     @PostMapping("/withdraw")
-    public ResponseEntity<Void> withdraw(
-            @Valid @RequestBody WithdrawRequest request,
+    public ResponseEntity<Void> RecapMonetFromMainWallet(
+            @Valid @RequestBody TrounsferMoneyOnSellerCard request,
             HttpSession session
     ) {
         Long sellerId = (Long) session.getAttribute("userId");

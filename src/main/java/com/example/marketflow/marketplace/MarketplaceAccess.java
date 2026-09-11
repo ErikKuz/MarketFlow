@@ -16,18 +16,18 @@ import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-public class MarketplaceAccess {
-    private final UserRepository users;
-    private final userRoleRepository roles;
+public class MarketplaceAccess {//проверка пользователя на права
+    private final UserRepository UR;
+    private final userRoleRepository URR;
 
     @Transactional(readOnly = true)
-    public void require(Long userId, String... allowedRoles) {
+    public void checkonRights(Long userId, String... allowedRoles) {
         if (userId == null) throw new MarketplaceException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Sign in first");
-        var user = users.findById(userId).orElseThrow(() ->
+        var user = UR.findById(userId).orElseThrow(() ->
                 new MarketplaceException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Account not found"));
         if (user.getStatus() != UserStatus.ACTIVE)
             throw new MarketplaceException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "Account is not active");
-        if (allowedRoles.length > 0 && Arrays.stream(allowedRoles).noneMatch(roles.findRoleNamesByUserId(userId)::contains))
+        if (allowedRoles.length > 0 && Arrays.stream(allowedRoles).noneMatch(URR.findRoleNamesByUserId(userId)::contains))
             throw new MarketplaceException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "Role does not allow this operation");
     }
 

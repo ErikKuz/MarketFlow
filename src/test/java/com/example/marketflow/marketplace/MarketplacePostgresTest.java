@@ -87,7 +87,7 @@ class MarketplacePostgresTest {
                 wallets.findByType(WalletType.PLATFORM).orElseThrow().getPendingBalance()
         );
         deliver(f);
-        workflow.confirmDelivery(f.buyer, f.order, f.part);
+        workflow.ConfirmThatUSERGETPRODUCTBySellerID(f.buyer, f.order, f.part);
         assertEquals(OrderStatus.COMPLETED, orders.findById(f.order).orElseThrow().getStatus());
         assertNotNull(orders.findById(f.order).orElseThrow().getDeliveredAt());
         moneyEquals("0.00", wallets.findByUserId(f.seller).orElseThrow().getPendingBalance());
@@ -151,7 +151,7 @@ class MarketplacePostgresTest {
         assertThrows(MarketplaceException.class, () -> workflow.sellerDetails(seller2, first.getId()));
         assertEquals(1, workflow.sellerDetails(f.seller, first.getId()).items().size());
         ship(f.seller, first.getId());
-        workflow.confirmDelivery(f.buyer, orderId, first.getId());
+        workflow.ConfirmThatUSERGETPRODUCTBySellerID(f.buyer, orderId, first.getId());
         assertEquals(OrderStatus.SELLERSSTARTWORK, orders.findById(orderId).orElseThrow().getStatus());
         assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET,
                 parts.findById(first.getId()).orElseThrow().getSettlementStatus());
@@ -159,7 +159,7 @@ class MarketplacePostgresTest {
         moneyEquals("90.00", wallets.findByUserId(f.seller).orElseThrow().getAvailableBalance());
         ship(seller2, second.getId());
         assertEquals(OrderStatus.SELLERSENDWORKANDSEND, orders.findById(orderId).orElseThrow().getStatus());
-        workflow.confirmDelivery(f.buyer, orderId, second.getId());
+        workflow.ConfirmThatUSERGETPRODUCTBySellerID(f.buyer, orderId, second.getId());
         assertEquals(OrderStatus.COMPLETED, orders.findById(orderId).orElseThrow().getStatus());
         assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET,
                 parts.findById(second.getId()).orElseThrow().getSettlementStatus());
@@ -387,7 +387,10 @@ class MarketplacePostgresTest {
     private long pay(Fixture f) {
         return payments.payOrder(f.order, f.buyer, new PayOrderRequest(f.buyerCard, "pay-" + f.order));
     }
-    private void deliver(Fixture f) { ship(f.seller, f.part); workflow.confirmDelivery(f.buyer, f.order, f.part); }
+    private void deliver(Fixture f) {
+        ship(f.seller, f.part);
+        workflow.ConfirmThatUSERGETPRODUCTBySellerID(f.buyer, f.order, f.part);
+    }
     private void ship(long seller, long part) {
         workflow.sellerTransition(seller, part, OBSERFFORSENDBYSELLERPRODUCTSTATUS.PROCESSING);
         workflow.sellerTransition(seller, part, OBSERFFORSENDBYSELLERPRODUCTSTATUS.SELLERSENDPRODUCT);
