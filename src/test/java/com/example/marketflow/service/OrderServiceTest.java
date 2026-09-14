@@ -32,6 +32,7 @@ import com.example.marketflow.exception.InvalidOrderStateException;
 import com.example.marketflow.exception.NoSelectedCartItemsException;
 import com.example.marketflow.products.ProductEntity;
 import com.example.marketflow.payment.PaymentStatus;
+import com.example.marketflow.messaging.outbox.OutboxService;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
@@ -53,6 +54,9 @@ class OrderServiceTest {
 
     @Mock
     private PaymentService paymentService;
+
+    @Mock
+    private OutboxService outboxService;
 
     @InjectMocks
     private OrderService orderService;
@@ -92,6 +96,7 @@ class OrderServiceTest {
         verify(orderItemRepository).saveAll(anyList());
         verify(workflow).initialize(org.mockito.ArgumentMatchers.eq(savedOrder), anyList());
         verify(cartItemRepository).deleteAllInBatch(List.of(cartItem));
+        verify(outboxService).save(any(), org.mockito.ArgumentMatchers.eq("order.created"));
     }
 
     @Test
@@ -143,6 +148,7 @@ class OrderServiceTest {
         orderService.cancelOrder(42L, 7L);
         assertEquals(OrderStatus.CANCELLED, order.getStatus());
         verify(workflow).cancelled(order);
+        verify(outboxService).save(any(), org.mockito.ArgumentMatchers.eq("order.cancelled"));
         verifyNoInteractions(productRepository, orderItemRepository);
     }
 

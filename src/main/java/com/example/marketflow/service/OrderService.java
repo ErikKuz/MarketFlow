@@ -1,6 +1,7 @@
 package com.example.marketflow.service;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -10,6 +11,10 @@ import com.example.marketflow.Order.*;
 import com.example.marketflow.Repository.*;
 import com.example.marketflow.exception.*;
 import com.example.marketflow.marketplace.OrderWorkflowService;
+import com.example.marketflow.messaging.MarketFlowEvent;
+import com.example.marketflow.messaging.MarketFlowEventType;
+import com.example.marketflow.messaging.RabbitMqNames;
+import com.example.marketflow.messaging.outbox.OutboxService;
 import com.example.marketflow.payment.PaymentStatus;
 import com.example.marketflow.products.ProductEntity;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +28,7 @@ public class OrderService {
     private final OrderItemRepository orderItemRepository;
     private final OrderWorkflowService workflow;
     private final PaymentService paymentService;
+    private final OutboxService outboxService;
 
     @Transactional
     public Long createOrder(Long buyerId) {
@@ -54,6 +60,17 @@ public class OrderService {
         workflow.initialize(order, items);
         // Удаляем только этот снимок корзины. Остаток повторно проверяется и уменьшается во время оплаты.
         cartItemRepository.deleteAllInBatch(selected);
+        outboxService.save(MarketFlowEvent.create(
+                MarketFlowEventType.ORDER_CREATED,
+                order.getId(),
+                null,
+                buyerId,
+                null,
+                total,
+                null,
+                OrderStatus.CREATED.name(),
+                Instant.now()
+        ), RabbitMqNames.ORDER_CREATED);
         return order.getId();
     }
 
@@ -80,6 +97,18 @@ public class OrderService {
             throw new InvalidOrderStateException("Only an unpaid order can be cancelled");
         }
         workflow.cancelled(order);
+        OrderStatus previousStatus = order.getStatus();
         order.changeStatus(OrderStatus.CANCELLED);
+        outboxService.save(MarketFlowEvent.create(
+                MarketFlowEventType.ORDER_CANCELLED,
+                order.getId(),
+                null,
+                buyerId,
+                null,
+                order.getTotalPrice(),
+                previousStatus.name(),
+                OrderStatus.CANCELLED.name(),
+                Instant.now()
+        ), RabbitMqNames.ORDER_CANCELLED);
     }
 }

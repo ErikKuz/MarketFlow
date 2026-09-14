@@ -12,12 +12,21 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 @EnabledIfEnvironmentVariable(named = "MARKETFLOW_TEST_POSTGRES_URL", matches = "jdbc:postgresql:.*")
 class MigrationPostgresTest {
     @Test
-    void freshDatabaseAppliesAllMigrationsAndSecondRunIsNoOp() {
+    void freshDatabaseAppliesAllMigrationsAndSecondRunIsNoOp() throws Exception {
         var schema = PostgresTestSupport.schema("migration_fresh_");
-        var flyway = flyway(schema, "15");
-        assertEquals(15, flyway.migrate().migrationsExecuted);
+        var flyway = flyway(schema, "17");
+        assertEquals(17, flyway.migrate().migrationsExecuted);
         flyway.validate();
         assertEquals(0, flyway.migrate().migrationsExecuted);
+        try (var c = connection(schema); var sql = c.createStatement(); var result = sql.executeQuery("""
+                SELECT count(*)
+                FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                  AND table_name IN ('outbox_events', 'order_event_history', 'notifications')
+                """)) {
+            assertTrue(result.next());
+            assertEquals(3, result.getInt(1));
+        }
     }
 
     @Test
@@ -47,8 +56,8 @@ class MigrationPostgresTest {
                     """);
         }
 
-        var upgrade = flyway(schema, "15");
-        assertEquals(3, upgrade.migrate().migrationsExecuted);
+        var upgrade = flyway(schema, "17");
+        assertEquals(5, upgrade.migrate().migrationsExecuted);
         upgrade.validate();
 
         try (var c = connection(schema); var sql = c.createStatement()) {

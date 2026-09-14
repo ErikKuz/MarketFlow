@@ -14,7 +14,8 @@
 HTTP → Spring Security → MVC/REST Controller
      → Service (@Transactional)
      → Spring Data JPA / Hibernate
-     → PostgreSQL
+     → PostgreSQL + outbox_events
+     → OutboxPublisher → RabbitMQ → history/notification consumers
 ```
 
 Flyway управляет схемой, OpenAPI описывает REST, Thymeleaf формирует HTML.
@@ -68,14 +69,24 @@ Order: CREATED → CONFIRMED → SELLERSSTARTWORK → SELLERSENDWORKANDSEND → 
 
 ## Не входит в MVP
 
-Заявки продавцов, модерация, кошельки продавцов, комиссия, вывод средств, возвраты после оплаты, аналитика, бизнес-аудит и дедлайн оплаты.
+Заявки продавцов, модерация, возвраты после получения, аналитика и дедлайн оплаты. Виртуальные кошельки, комиссия, условный вывод и возврат до начала обработки входят в текущую версию.
+
+## RabbitMQ
+
+- topic exchange `marketflow.events.exchange`;
+- независимые очереди истории, покупателя и продавца;
+- общие dead-letter exchange и очередь;
+- JSON-событие с уникальным `eventId`;
+- Transactional Outbox с publisher confirm, повторными попытками и статусами `NEW`, `PUBLISHED`, `FAILED`;
+- идемпотентные consumers истории и уведомлений;
+- REST API чтения и отметки уведомлений.
 
 ## Проверка готовности
 
 - проект и тесты компилируются;
 - unit-, repository-, MVC- и security-тесты проходят;
-- PostgreSQL-тесты проверяют свежую миграцию и обновление V11 → V12;
+- PostgreSQL-тесты проверяют миграции до V17;
 - проверены параллельная оплата, последний остаток и заказ с двумя продавцами;
 - документация и OpenAPI соответствуют коду.
 
-После этого добавляется RabbitMQ для событий, не влияющих на атомарность основной транзакции.
+RabbitMQ не участвует в расчёте денег и не влияет на атомарность основной транзакции: он получает только уже зафиксированные факты через Outbox.

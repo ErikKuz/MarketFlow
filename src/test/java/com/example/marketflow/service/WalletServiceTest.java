@@ -27,6 +27,7 @@ import com.example.marketflow.payment.TransactionStatus;
 import com.example.marketflow.payment.TransactionType;
 import com.example.marketflow.payment.WalletAccountEntity;
 import com.example.marketflow.payment_cards.PaymentCardEntity;
+import com.example.marketflow.messaging.outbox.OutboxService;
 
 @ExtendWith(MockitoExtension.class)
 class WalletServiceTest {
@@ -34,6 +35,7 @@ class WalletServiceTest {
     @Mock WalletAccountRepository wallets;
     @Mock PaymentCardRepository cards;
     @Mock PaymentTransactionRepository transactions;
+    @Mock OutboxService outboxService;
     @InjectMocks WalletService service;
 
     @Test
@@ -52,6 +54,7 @@ class WalletServiceTest {
         verify(transactions).saveAndFlush(captor.capture());
         assertEquals(TransactionType.SELLER_TRANSFERMONEYFROMMAINWALLET, captor.getValue().getType());
         assertEquals(TransactionStatus.COMPLETED, captor.getValue().getStatus());
+        verify(outboxService).save(any(), org.mockito.ArgumentMatchers.eq("money.seller.withdrawn"));
     }
 
     @Test

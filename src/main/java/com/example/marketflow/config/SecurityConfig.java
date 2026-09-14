@@ -92,6 +92,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/wallet/**").hasRole("SELLER")
                         .requestMatchers("/api/v1/auth/logout").authenticated()
                         .requestMatchers("/api/v1/account/**").authenticated()
+                        .requestMatchers("/api/v1/notifications/**").authenticated()
                         .requestMatchers(
                                 "/api/v1/cart/**",
                                 "/api/v1/checkout/**",

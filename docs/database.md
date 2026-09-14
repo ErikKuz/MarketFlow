@@ -19,6 +19,9 @@ PostgreSQL is the source of truth for MarketFlow. Spring Data JPA handles persis
 | `payment_cards` | Simulated card tokens, masked numbers, balances, and activity state |
 | `wallet_accounts` | Pending and available virtual balances for sellers and the platform |
 | `payment_transactions` | Idempotent payment, accrual, commission, release, withdrawal and refund entries |
+| `outbox_events` | Transactional RabbitMQ events and publication state |
+| `order_event_history` | Idempotently consumed order and money history |
+| `notifications` | Buyer and seller notifications created by RabbitMQ consumers |
 | `flyway_schema_history` | Flyway migration history |
 
 ## Data-integrity rules
@@ -33,6 +36,8 @@ PostgreSQL is the source of truth for MarketFlow. Spring Data JPA handles persis
 - Payment idempotency keys are unique.
 - Conditional stock updates prevent negative inventory.
 - Order-item snapshot fields preserve historical product information.
+- Event identifiers are unique in Outbox and order history.
+- Notification uniqueness includes event, user and recipient type.
 
 ## V12 archive
 

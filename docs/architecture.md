@@ -4,11 +4,16 @@
 
 MarketFlow is currently a modular monolith implemented as a Spring Boot application with MVC + Thymeleaf and REST boundaries. Buyer and seller workflows share one deployable application and one PostgreSQL database while remaining separated at the controller and service levels.
 
-The current structure favours a straightforward request flow:
+The synchronous business transaction and asynchronous event flow are:
 
 ```text
-HTTP request -> Spring Security -> MVC/REST Controller -> Service -> Repository -> PostgreSQL
-                                                        -> JSON or Thymeleaf
+HTTP -> Spring Security -> Controller -> @Transactional Service -> PostgreSQL
+                                                       -> outbox_events
+outbox_events -> OutboxPublisher -> RabbitMQ topic exchange
+                                  -> history queue -> order_event_history
+                                  -> buyer queue   -> notifications
+                                  -> seller queue  -> notifications
+failed consumer message -> dead-letter exchange -> dead-letter queue
 ```
 
 The architecture is intentionally kept as a monolith while the core marketplace rules are still evolving. Splitting the application into services before the domain boundaries and operational requirements are stable would add deployment and consistency complexity without a demonstrated benefit.
@@ -31,6 +36,10 @@ Spring Data JPA repositories persist users, roles, products, carts, orders, orde
 
 Thymeleaf templates render the current HTML interface. REST controllers and MVC controllers call the same transactional services, so business rules are not duplicated.
 
+### Messaging layer
+
+Services never publish directly to RabbitMQ. They save `MarketFlowEvent` records to `outbox_events` inside the same PostgreSQL transaction as the business change. `OutboxPublisher` sends `NEW` rows, waits for a correlated publisher confirm, marks acknowledged rows `PUBLISHED`, and retries failures with a delay. Consumers are idempotent by `eventId`. Retry exhaustion in a listener routes the rejected message to the shared DLQ.
+
 ## Important domain rules
 
 - Seller operations must verify both seller authority and product ownership.
@@ -49,7 +58,7 @@ Thymeleaf templates render the current HTML interface. REST controllers and MVC 
 ## Planned evolution
 
 1. Keep the synchronous multi-seller order path stable.
-2. Publish committed order and delivery events through RabbitMQ.
+2. Keep RabbitMQ event contracts backward compatible as new consumers appear.
 3. Add Redis only when catalogue caching has measurable benefit.
 4. Add CI and container packaging.
 

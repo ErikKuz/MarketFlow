@@ -30,6 +30,10 @@ import com.example.marketflow.payment.TransactionStatus;
 import com.example.marketflow.payment.TransactionType;
 import com.example.marketflow.payment.WalletAccountEntity;
 import com.example.marketflow.payment.WalletType;
+import com.example.marketflow.messaging.MarketFlowEvent;
+import com.example.marketflow.messaging.MarketFlowEventType;
+import com.example.marketflow.messaging.RabbitMqNames;
+import com.example.marketflow.messaging.outbox.OutboxService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -43,6 +47,7 @@ public class OrderWorkflowService {
     private final PaymentTransactionRepository PTR;
     private final MarketplaceAccess access;
     private final Clock clock;
+    private final OutboxService outboxService;
 
     //группирует товары заказа по продавцам,считает для кажвыго сумму
     @Transactional
@@ -121,9 +126,20 @@ public class OrderWorkflowService {
             throw new InvalidOrderStateException("Only a paid, open order can be fulfilled");
         }
         if (part.getStatus() == next) return;
+        var previousPartStatus = part.getStatus();
         part.transition(next, clock.instant());
         if (order.getStatus() == OrderStatus.CONFIRMED) order.changeStatus(OrderStatus.SELLERSSTARTWORK);
         CheckSELLERSENDWORKANDSEND(order);
+        MarketFlowEventType eventType = next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.PROCESSING
+                ? MarketFlowEventType.SELLER_STARTED_WORK
+                : MarketFlowEventType.SELLER_SENT_PRODUCT;
+        String routingKey = next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.PROCESSING
+                ? RabbitMqNames.SELLER_STARTED_WORK
+                : RabbitMqNames.SELLER_SENT_PRODUCT;
+        saveEvent(
+                eventType, routingKey, order, part, null,
+                previousPartStatus.name(), next.name()
+        );
     }
 
     private void CheckSELLERSENDWORKANDSEND(OrderEntity order) {
@@ -151,13 +167,42 @@ public class OrderWorkflowService {
                 && order.getStatus() != OrderStatus.SELLERSENDWORKANDSEND) {
             throw new InvalidOrderStateException("The order is not being delivered");
         }
+        var previousPartStatus = part.getStatus();
         part.transition(OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT, clock.instant());
         TrounseferMoneyFromPendingInMainWallet(part);
+        saveEvent(
+                MarketFlowEventType.USER_RECEIVED_PRODUCT,
+                RabbitMqNames.USER_RECEIVED_PRODUCT,
+                order,
+                part,
+                null,
+                previousPartStatus.name(),
+                OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT.name()
+        );
+        saveEvent(
+                MarketFlowEventType.SELLER_MONEY_AVAILABLE,
+                RabbitMqNames.SELLER_MONEY_AVAILABLE,
+                order,
+                part,
+                part.getSellerAmount(),
+                OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET.name(),
+                OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET.name()
+        );
         CheckSELLERSENDWORKANDSEND(order);
         if (SOR.findAllByOrderIdOrderBySellerId(orderId).stream()
                 .allMatch(p -> p.getStatus() == OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT)) {
+            OrderStatus previousOrderStatus = order.getStatus();
             order.changeStatus(OrderStatus.COMPLETED);
             order.recordDelivery(clock.instant());
+            saveEvent(
+                    MarketFlowEventType.ORDER_COMPLETED,
+                    RabbitMqNames.ORDER_COMPLETED,
+                    order,
+                    null,
+                    order.getTotalPrice(),
+                    previousOrderStatus.name(),
+                    OrderStatus.COMPLETED.name()
+            );
         }
     }
 
@@ -233,5 +278,27 @@ public class OrderWorkflowService {
                 "funds-release:" + owner + ":" + part.getOrderId() + ":" + part.getId(),
                 null
         ));
+    }
+
+    private void saveEvent(
+            MarketFlowEventType type,
+            String routingKey,
+            OrderEntity order,
+            SellerOrderEntity part,
+            BigDecimal amount,
+            String previousStatus,
+            String currentStatus
+    ) {
+        outboxService.save(MarketFlowEvent.create(
+                type,
+                order.getId(),
+                part == null ? null : part.getId(),
+                order.getBuyerId(),
+                part == null ? null : part.getSellerId(),
+                amount,
+                previousStatus,
+                currentStatus,
+                clock.instant()
+        ), routingKey);
     }
 }

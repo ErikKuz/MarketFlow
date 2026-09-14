@@ -1,72 +1,50 @@
 # Задача 10. RabbitMQ и события
 
-## Проблема
+## Статус
 
-Создание заказа, уведомления, аналитика и действия продавца не должны быть жёстко связаны одним большим синхронным методом.
+Реализовано.
 
-## Для чего это нужно
-
-RabbitMQ позволяет публиковать факт произошедшего события и независимо обрабатывать его несколькими потребителями.
-
-RabbitMQ подключается после того, как заказ, оплата и статусы уже работают синхронно.
-
-## События
+## Путь события
 
 ```text
-OrderCreatedEvent
-OrderPaidEvent
-SellerOrderAcceptedEvent
-OrderShippedEvent
-OrderDeliveredEvent
-OrderCancelledEvent
-RefundCompletedEvent
+бизнес-сервис
+→ outbox_events в общей PostgreSQL-транзакции
+→ OutboxPublisher
+→ marketflow.events.exchange
+→ одна или несколько очередей
+→ идемпотентный consumer
+→ order_event_history / notifications
 ```
 
-Пример:
-
-```java
-public record OrderStatusChangedEvent(
-        UUID eventId,
-        Long orderId,
-        Long sellerOrderId,
-        String previousStatus,
-        String currentStatus,
-        Instant occurredAt
-) {
-}
-```
-
-## Что создать
-
-```text
-config/RabbitMqConfig.java
-event/OrderStatusChangedEvent.java
-messaging/OrderEventPublisher.java
-messaging/OrderEventListener.java
-```
+Бизнес-сервисы не вызывают `RabbitTemplate` напрямую. Если RabbitMQ временно недоступен, заказ и оплата продолжают работать, а событие остаётся в `outbox_events` для повторной отправки.
 
 ## Очереди
 
 ```text
-order.created.queue
-order.paid.queue
-order.status.queue
-notification.queue
-analytics.queue
-order.dead-letter.queue
+marketflow.event-history.queue
+marketflow.buyer-notifications.queue
+marketflow.seller-notifications.queue
+marketflow.dead-letter.queue
 ```
+
+Topic exchange позволяет одному событию одновременно попасть, например, в историю и в уведомления. У каждого сообщения есть `eventId`; уникальные ограничения защищают consumers от повторной записи.
 
 ## Надёжность
 
-- Сообщения передавать в JSON, а не через Java serialization.
-- У каждого события должен быть уникальный `eventId`.
-- Consumer должен быть идемпотентным.
-- Настроить retry и Dead Letter Queue.
-- Для согласованности БД и RabbitMQ позднее применить Transactional Outbox.
+- JSON вместо Java serialization;
+- publisher confirms и mandatory returns;
+- повторная публикация Outbox с увеличением `attempts`;
+- статус `FAILED` после исчерпания попыток publisher;
+- три попытки обработки listener;
+- отклонённые сообщения направляются через DLX в DLQ;
+- повторная доставка consumer-у не создаёт вторую историю или уведомление.
 
-## Задержка доставки
+## Проверка
 
-Для учебной имитации `SELLERSENDPRODUCT -> USERGETPRODUCT` использовать TTL + Dead Letter Exchange. Перед автоматическим переходом повторно проверить текущий статус.
+1. Выполнить `docker compose up -d`.
+2. Открыть RabbitMQ Management: `http://localhost:15672`.
+3. Запустить приложение и пройти путь заказа.
+4. Проверить exchange, четыре очереди и строки `PUBLISHED` в `outbox_events`.
+5. Проверить `order_event_history` и `notifications`.
 
-В production статус `USERGETPRODUCT` обычно приходит от службы доставки, а не устанавливается только по таймеру.
-
+Интеграционный тест `RabbitMqIntegrationTest` использует Testcontainers и автоматически пропускается, если Docker недоступен.

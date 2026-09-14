@@ -29,7 +29,7 @@ CREATED → CONFIRMED → SELLERSSTARTWORK → SELLERSENDWORKANDSEND → COMPLET
 
 Учебная оплата не связана с банком. Она атомарно проверяет владельца карты и баланс, списывает товарный остаток, уменьшает баланс тестовой карты, начисляет продавцам виртуальные средства за вычетом комиссии и начисляет комиссию платформе. До получения товара деньги находятся в `pendingBalance`, после получения переходят в `availableBalance`. Ключ идемпотентности и блокировки защищают от повторного списания и продажи последней единицы двум покупателям.
 
-Доступны MVC + Thymeleaf страницы и REST API по OpenAPI-контрактам. Spring Security использует `JSESSIONID`, серверную сессию, роли `BUYER` / `SELLER` и CSRF-защиту.
+Доступны MVC + Thymeleaf страницы и REST API по OpenAPI-контрактам. Spring Security использует `JSESSIONID`, серверную сессию, роли `BUYER` / `SELLER` и CSRF-защиту. Важные изменения заказа и виртуальных денег сохраняются через Transactional Outbox, публикуются в RabbitMQ и независимо попадают в историю заказа и уведомления.
 
 ## Что сознательно не входит в MVP
 
@@ -37,7 +37,7 @@ CREATED → CONFIRMED → SELLERSSTARTWORK → SELLERSENDWORKANDSEND → COMPLET
 
 ## Стек
 
-Java 21, Spring Boot 4, Spring MVC, Thymeleaf, Spring Security, Spring Data JPA, Hibernate, PostgreSQL, Flyway, OpenAPI, Maven, JUnit 5, Mockito и MockMvc.
+Java 21, Spring Boot 4, Spring MVC, Thymeleaf, Spring Security, Spring Data JPA, Hibernate, PostgreSQL, Flyway, RabbitMQ, OpenAPI, Maven, JUnit 5, Mockito, MockMvc и Testcontainers.
 
 ## Основные таблицы
 
@@ -52,16 +52,29 @@ Java 21, Spring Boot 4, Spring MVC, Thymeleaf, Spring Security, Spring Data JPA,
 | `payment_cards` | Тестовые карты и условный баланс |
 | `wallet_accounts` | Ожидающие и доступные виртуальные балансы продавцов и платформы |
 | `payment_transactions` | Оплата, начисления, комиссия, освобождение средств, вывод и возврат |
+| `outbox_events` | События, ожидающие подтверждённой публикации в RabbitMQ |
+| `order_event_history` | Асинхронная история событий заказов и денег |
+| `notifications` | Уведомления покупателей и продавцов |
 | `flyway_schema_history` | История миграций |
 
 ## Запуск
 
-Создайте PostgreSQL-базу, скопируйте `.env.example` в `.env` и задайте подключение:
+PostgreSQL и RabbitMQ можно запустить одной командой:
+
+```powershell
+docker compose up -d
+```
+
+Скопируйте `.env.example` в `.env` и задайте подключение:
 
 ```env
 DB_URL=jdbc:postgresql://localhost:5432/marketflow
 DB_USERNAME=postgres
 DB_PASSWORD=change_me
+RABBITMQ_HOST=localhost
+RABBITMQ_PORT=5672
+RABBITMQ_USERNAME=guest
+RABBITMQ_PASSWORD=guest
 ```
 
 Запуск Windows:
@@ -95,7 +108,9 @@ REST API находится под `/api/v1`; контракты — в ката
 
 Условный вывод доступных средств продавца: `POST /api/v1/wallet/withdraw`.
 
+Уведомления: `GET /api/v1/notifications` и `POST /api/v1/notifications/{id}/read`. RabbitMQ Management доступен по адресу `http://localhost:15672`.
+
 ## Следующий этап
 
-После стабилизации этого синхронного пути — RabbitMQ для асинхронных событий и уведомлений. Redis можно добавить позднее для кеширования каталога после появления измеримой пользы.
+RabbitMQ и Transactional Outbox уже внедрены. Следующим инфраструктурным этапом может быть Redis для кеширования каталога после появления измеримой пользы.
 

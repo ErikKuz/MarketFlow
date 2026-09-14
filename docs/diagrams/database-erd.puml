@@ -77,6 +77,10 @@ entity seller_orders {
   order_id : BIGINT <<FK>>
   seller_id : BIGINT <<FK>>
   total_amount : NUMERIC(14,2)
+  commission_rate : NUMERIC(5,4)
+  commission_amount : NUMERIC(14,2)
+  seller_amount : NUMERIC(14,2)
+  settlement_status : VARCHAR(20)
   status : VARCHAR(30)
   created_at : TIMESTAMPTZ
   shipped_at : TIMESTAMPTZ
@@ -89,10 +93,56 @@ entity payment_transactions {
   order_id : BIGINT <<FK>>
   user_id : BIGINT <<FK>>
   payment_card_id : BIGINT <<FK>>
-  type : PAYMENT
+  seller_order_id : BIGINT <<FK>>
+  wallet_account_id : BIGINT <<FK>>
+  related_transaction_id : BIGINT <<FK>>
+  type : VARCHAR(40)
   amount : NUMERIC(14,2)
   status : VARCHAR(30)
-  idempotency_key : VARCHAR(100) <<UK>>
+  idempotency_key : VARCHAR(150) <<UK>>
+}
+
+entity wallet_accounts {
+  * id : BIGINT <<PK>>
+  --
+  user_id : BIGINT <<FK>>
+  type : VARCHAR(20)
+  pending_balance : NUMERIC(14,2)
+  available_balance : NUMERIC(14,2)
+}
+
+entity outbox_events {
+  * id : BIGINT <<PK>>
+  --
+  event_id : UUID <<UK>>
+  event_type : VARCHAR(60)
+  routing_key : VARCHAR(100)
+  payload : TEXT
+  status : VARCHAR(20)
+  attempts : INTEGER
+  available_at : TIMESTAMPTZ
+}
+
+entity order_event_history {
+  * id : BIGINT <<PK>>
+  --
+  event_id : UUID <<UK>>
+  order_id : BIGINT <<FK>>
+  seller_order_id : BIGINT <<FK>>
+  event_type : VARCHAR(60)
+  previous_status : VARCHAR(60)
+  current_status : VARCHAR(60)
+  occurred_at : TIMESTAMPTZ
+}
+
+entity notifications {
+  * id : BIGINT <<PK>>
+  --
+  event_id : UUID
+  user_id : BIGINT <<FK>>
+  recipient_type : VARCHAR(20)
+  title : VARCHAR(150)
+  is_read : BOOLEAN
 }
 
 entity payment_cards {
@@ -120,5 +170,12 @@ orders ||--o{ payment_transactions
 users ||--o{ payment_transactions : buyer
 payment_cards ||--o{ payment_transactions
 users ||--o{ payment_cards
+seller_orders ||--o{ payment_transactions
+wallet_accounts ||--o{ payment_transactions
+payment_transactions ||--o{ payment_transactions : reverses
+users ||--o{ wallet_accounts
+orders ||--o{ order_event_history
+seller_orders ||--o{ order_event_history
+users ||--o{ notifications
 
 @enduml

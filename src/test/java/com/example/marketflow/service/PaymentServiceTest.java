@@ -18,6 +18,7 @@ import com.example.marketflow.marketplace.SellerOrderRepository;
 import com.example.marketflow.marketplace.OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS;
 import com.example.marketflow.payment.*;
 import com.example.marketflow.payment_cards.PaymentCardEntity;
+import com.example.marketflow.messaging.outbox.OutboxService;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceTest {
@@ -28,6 +29,7 @@ class PaymentServiceTest {
     @Mock ProductRepository products;
     @Mock SellerOrderRepository sellerOrders;
     @Mock WalletAccountRepository wallets;
+    @Mock OutboxService outboxService;
     @InjectMocks PaymentService service;
     private final PayOrderRequest request = new PayOrderRequest(15L, "payment-key");
 
@@ -97,6 +99,7 @@ class PaymentServiceTest {
         assertEquals(0, secondSellerWallet.getPendingBalance().compareTo(new BigDecimal("36.00")));
         assertEquals(0, platformWallet.getPendingBalance().compareTo(new BigDecimal("10.00")));
         verify(transactions, times(4)).save(any(PaymentTransactionEntity.class));
+        verify(outboxService, times(5)).save(any(), anyString());
     }
     @Test
     void insufficientBalanceRecordsFailedAttemptWithoutChangingStockOrCard() {
@@ -110,6 +113,7 @@ class PaymentServiceTest {
         var captor = ArgumentCaptor.forClass(PaymentTransactionEntity.class);
         verify(transactions).saveAndFlush(captor.capture());
         assertEquals(TransactionStatus.FAILED, captor.getValue().getStatus());
+        verifyNoInteractions(outboxService);
     }
     @Test
     void completedKeyReturnsSameOrderWithoutSecondDebit() {
@@ -120,6 +124,7 @@ class PaymentServiceTest {
         assertEquals(42L, service.payOrder(42L, 7L, request));
         verifyNoInteractions(cards, items, products);
         verify(transactions, never()).saveAndFlush(any());
+        verifyNoInteractions(outboxService);
     }
     @Test
     void sameKeyCannotBeUsedWithAnotherCard() {

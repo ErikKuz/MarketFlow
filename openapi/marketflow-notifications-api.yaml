@@ -1,0 +1,78 @@
+openapi: 3.0.3
+
+info:
+  title: MarketFlow Notifications API
+  version: 0.1.0
+  description: Асинхронные уведомления текущего покупателя или продавца.
+
+servers:
+  - url: http://localhost:8080
+
+security:
+  - sessionCookie: []
+
+paths:
+  /api/v1/notifications:
+    get:
+      summary: Получить уведомления текущего пользователя
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Страница уведомлений
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPage' }
+        '401': { description: Требуется вход }
+
+  /api/v1/notifications/{id}/read:
+    post:
+      summary: Отметить собственное уведомление прочитанным
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+        - name: X-CSRF-TOKEN
+          in: header
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Уведомление отмечено прочитанным }
+        '401': { description: Требуется вход }
+        '404': { description: Уведомление не найдено }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+  schemas:
+    Notification:
+      type: object
+      required: [id, eventId, recipientType, title, message, read, createdAt]
+      properties:
+        id: { type: integer, format: int64 }
+        eventId: { type: string, format: uuid }
+        recipientType: { type: string, enum: [BUYER, SELLER] }
+        title: { type: string }
+        message: { type: string }
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    NotificationPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/Notification' }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }

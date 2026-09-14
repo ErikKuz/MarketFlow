@@ -1,6 +1,7 @@
 package com.example.marketflow.service;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Objects;
 
 import org.springframework.stereotype.Service;
@@ -15,6 +16,10 @@ import com.example.marketflow.exception.PaymentCardNotFoundException;
 import com.example.marketflow.payment.PaymentTransactionEntity;
 import com.example.marketflow.payment.TransactionStatus;
 import com.example.marketflow.payment.TransactionType;
+import com.example.marketflow.messaging.MarketFlowEvent;
+import com.example.marketflow.messaging.MarketFlowEventType;
+import com.example.marketflow.messaging.RabbitMqNames;
+import com.example.marketflow.messaging.outbox.OutboxService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -25,6 +30,7 @@ public class WalletService {
     private final WalletAccountRepository WAR;
     private final PaymentCardRepository PCR;
     private final PaymentTransactionRepository PTR;
+    private final OutboxService outboxService;
 
     @Transactional
     public void transerMoneyfromWallerforSeller(//выполняет условный вывод денег продавца
@@ -74,6 +80,17 @@ public class WalletService {
                 idempotencyKey,
                 cardId
         ));
+        outboxService.save(MarketFlowEvent.create(
+                MarketFlowEventType.SELLER_WITHDRAWAL_COMPLETED,
+                null,
+                null,
+                null,
+                sellerId,
+                amount,
+                null,
+                TransactionStatus.COMPLETED.name(),
+                Instant.now()
+        ), RabbitMqNames.SELLER_WITHDRAWAL_COMPLETED);
     }
 
     private void validateRequest(

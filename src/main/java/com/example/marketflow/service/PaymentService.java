@@ -31,6 +31,10 @@ import com.example.marketflow.marketplace.OBSERFFORSENDBYSELLERPRODUCTSTATUS;
 import com.example.marketflow.marketplace.SellerOrderEntity;
 import com.example.marketflow.marketplace.SellerOrderRepository;
 import com.example.marketflow.marketplace.OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS;
+import com.example.marketflow.messaging.MarketFlowEvent;
+import com.example.marketflow.messaging.MarketFlowEventType;
+import com.example.marketflow.messaging.RabbitMqNames;
+import com.example.marketflow.messaging.outbox.OutboxService;
 import com.example.marketflow.payment.PayOrderRequest;
 import com.example.marketflow.payment.PaymentMapper;
 import com.example.marketflow.payment.PaymentPageDto;
@@ -54,6 +58,7 @@ public class PaymentService {
     private final ProductRepository PR;
     private final SellerOrderRepository SOR;
     private final WalletAccountRepository WAR;
+    private final OutboxService outboxService;
 
     @Transactional(readOnly = true)
     public PaymentPageDto getPaymentPage(Long orderId, Long buyerId) {
@@ -109,9 +114,19 @@ public class PaymentService {
         // Заблокированная управляемая сущность карты сохраняется в одной транзакции с остатками и оплатой.
         card.debit(order.getTotalPrice());//уменьшали деньги с карты покупателя
         savePayment(order, request, TransactionStatus.COMPLETED);
-        divideBetweenSellerAndPlatform(order);//раздали по продавцам
         order.changePaymentStatus(PaymentStatus.PAID);
         order.changeStatus(OrderStatus.CONFIRMED);
+        saveEvent(
+                MarketFlowEventType.ORDER_PAID,
+                RabbitMqNames.ORDER_PAID,
+                order,
+                null,
+                null,
+                order.getTotalPrice(),
+                PaymentStatus.PROCESSING.name(),
+                PaymentStatus.PAID.name()
+        );
+        divideBetweenSellerAndPlatform(order);//раздали по продавцам
         return orderId;
     }
 
@@ -182,6 +197,16 @@ public class PaymentService {
         ));
         order.changePaymentStatus(PaymentStatus.REFUNDED);
         order.changeStatus(OrderStatus.CANCELLED);
+        saveEvent(
+                MarketFlowEventType.ORDER_REFUNDED,
+                RabbitMqNames.ORDER_REFUNDED,
+                order,
+                null,
+                null,
+                order.getTotalPrice(),
+                PaymentStatus.PAID.name(),
+                PaymentStatus.REFUNDED.name()
+        );
     }
 
     private PaymentTransactionEntity savePayment(//сохраняет в payment_transactions запись об успешной или неуспешной попытке
@@ -231,6 +256,16 @@ public class PaymentService {
                     sellerAmount,
                     "seller-accrual:"
             );
+            saveEvent(
+                    MarketFlowEventType.SELLER_MONEY_PENDING,
+                    RabbitMqNames.SELLER_MONEY_PENDING,
+                    order,
+                    part,
+                    part.getSellerId(),
+                    sellerAmount,
+                    OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.NOT_DISTRIBUTE.name(),
+                    OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET.name()
+            );
 
             if (commission.signum() > 0) {
                 platformWallet.addPending(commission);
@@ -243,6 +278,16 @@ public class PaymentService {
                         TransactionType.PLATFORM_COMMISSION,
                         commission,
                         "platform-commission:"
+                );
+                saveEvent(
+                        MarketFlowEventType.PLATFORM_COMMISSION_ADDED,
+                        RabbitMqNames.PLATFORM_COMMISSION_ADDED,
+                        order,
+                        part,
+                        null,
+                        commission,
+                        OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.NOT_DISTRIBUTE.name(),
+                        OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET.name()
                 );
             }
         }
@@ -296,6 +341,28 @@ public class PaymentService {
 
         part.reverseSettlement();
         part.transition(OBSERFFORSENDBYSELLERPRODUCTSTATUS.CANCELLED, Instant.now());
+        saveEvent(
+                MarketFlowEventType.SELLER_MONEY_RETURNED,
+                RabbitMqNames.SELLER_MONEY_RETURNED,
+                order,
+                part,
+                part.getSellerId(),
+                part.getSellerAmount(),
+                OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET.name(),
+                OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.RETURNMONEY.name()
+        );
+        if (part.getCommissionAmount().signum() > 0) {
+            saveEvent(
+                    MarketFlowEventType.PLATFORM_COMMISSION_RETURNED,
+                    RabbitMqNames.PLATFORM_COMMISSION_RETURNED,
+                    order,
+                    part,
+                    null,
+                    part.getCommissionAmount(),
+                    OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET.name(),
+                    OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.RETURNMONEY.name()
+            );
+        }
     }
 
     private WalletAccountEntity BlockPlatformWallet() {
@@ -340,5 +407,28 @@ public class PaymentService {
                 keyPrefix + orderId + ":" + part.getId(),
                 null
         ));
+    }
+
+    private void saveEvent(
+            MarketFlowEventType type,
+            String routingKey,
+            OrderEntity order,
+            SellerOrderEntity part,
+            Long sellerId,
+            BigDecimal amount,
+            String previousStatus,
+            String currentStatus
+    ) {
+        outboxService.save(MarketFlowEvent.create(
+                type,
+                order.getId(),
+                part == null ? null : part.getId(),
+                order.getBuyerId(),
+                sellerId,
+                amount,
+                previousStatus,
+                currentStatus,
+                Instant.now()
+        ), routingKey);
     }
 }
