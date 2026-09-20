@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Профиль | MarketFlow</title>
     <link rel="stylesheet" th:href="@{/css/auth.css}" href="/css/auth.css">
+    <script th:src="@{/js/notifications.js}" src="/js/notifications.js" defer></script>
 </head>
 <body>
     <main class="page-shell">
         <header class="topbar">
             <a class="brand brand-dark" th:href="@{/}" href="/">MarketFlow</a>
-            <a class="back-link" th:href="@{/login}" href="/login">← Вернуться назад</a>
+            <a class="back-link" th:href="@{/account/catalog}" href="/account/catalog">← Вернуться в каталог</a>
         </header>
 
         <section class="profile-section" aria-labelledby="profile-title">
@@ -36,6 +37,12 @@
             </dl>
 
             <div class="action-stack">
+                <a class="button button-primary" th:if="${isSeller}" th:href="@{/seller/account}">
+                    Перейти в кабинет продавца
+                </a>
+                <a class="button button-secondary" th:href="@{/notifications}">
+                    🔔 Уведомления <span class="notification-count" data-unread-count hidden>0</span>
+                </a>
                 <a class="button button-secondary" th:href="@{/account/orders}">Мои заказы</a>
                 <a class="button button-primary" th:href="@{/account/catalog}" href="/account/catalog">
                     Открыть каталог

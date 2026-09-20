@@ -864,6 +864,39 @@ a {
     margin-top: 20px;
 }
 
+.order-history-section {
+    margin-top: 34px;
+}
+
+.order-history {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid #d9dfdb;
+    border-radius: 7px;
+    background: #ffffff;
+}
+
+.order-history-item {
+    display: grid;
+    grid-template-columns: minmax(180px, 0.35fr) minmax(240px, 1fr) auto;
+    align-items: center;
+    gap: 18px;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e3e7e4;
+}
+
+.order-history-item:last-child {
+    border-bottom: 0;
+}
+
+.order-history-item time {
+    color: #68736d;
+    font-size: 13px;
+}
+
 .payment-checkout-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(280px, 0.4fr);
@@ -1250,3 +1283,4 @@ a {
         width: 100%;
     }
 }
+.notification-count{display:inline-flex;min-width:20px;height:20px;align-items:center;justify-content:center;border-radius:999px;padding:0 6px;background:#c62828;color:#fff;font-size:12px;font-weight:800;line-height:1}

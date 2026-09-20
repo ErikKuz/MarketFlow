@@ -17,6 +17,7 @@
         <a th:href="@{/account/catalog}" href="/account/catalog">Каталог</a>
         <a th:href="@{/account/cart}" href="/account/cart">Корзина</a>
         <a th:href="@{/account/account/cards}" href="/account/account/cards">Карты</a>
+        <a th:if="${isSeller}" th:href="@{/seller/account}" href="/seller/account">Кабинет продавца</a>
         <a th:href="@{/Buyer/account}" href="/Buyer/account">Профиль</a>
     </nav>
 </header>

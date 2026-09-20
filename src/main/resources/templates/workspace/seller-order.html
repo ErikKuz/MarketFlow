@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{workspace/fragments :: head('Обработка заказа')}"></head>
-<body><nav th:replace="~{workspace/fragments :: nav}"></nav>
+<body><nav th:replace="~{workspace/fragments :: sellerNav}"></nav>
 <main class="workspace"><h1>Обработка заказа</h1>
 <div class="panel"><h2 th:text="${'Часть #' + details.fulfillment.id + ' заказа #' + details.fulfillment.orderId}"></h2>
 <p>Статус: <b th:text="${details.fulfillment.status}"></b> · Оплата: <span th:text="${details.paymentStatus}"></span></p>

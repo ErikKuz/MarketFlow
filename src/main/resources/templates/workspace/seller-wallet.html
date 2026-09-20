@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{workspace/fragments :: head('Кошелёк продавца')}"></head>
+<body>
+<nav th:replace="~{workspace/fragments :: sellerNav}"></nav>
+<main class="workspace">
+    <h1>Кошелёк продавца</h1>
+
+    <p class="success-message" th:if="${withdrawalAccepted}">
+        Заявка <strong th:text="${withdrawalId == null ? '' : '#' + withdrawalId}"></strong>
+        принята. RabbitMQ обработает вывод асинхронно; статус виден в истории ниже.
+    </p>
+
+    <section class="wallet-summary" aria-label="Балансы кошелька">
+        <article class="panel">
+            <p class="muted">Ожидают подтверждения покупателем</p>
+            <div class="metric" th:text="${wallet.pendingBalance + ' ₽'}">0.00 ₽</div>
+        </article>
+        <article class="panel">
+            <p class="muted">Доступно для вывода</p>
+            <div class="metric" th:text="${wallet.availableBalance + ' ₽'}">0.00 ₽</div>
+        </article>
+        <article class="panel">
+            <p class="muted">Зарезервировано для вывода</p>
+            <div class="metric" th:text="${wallet.reservedBalance + ' ₽'}">0.00 ₽</div>
+        </article>
+    </section>
+
+    <section class="panel" aria-labelledby="withdraw-title">
+        <h2 id="withdraw-title">Вывести деньги на тестовую карту</h2>
+        <p class="muted">После отправки заявка получит статус PENDING, а затем COMPLETED или FAILED.</p>
+
+        <form th:if="${hasActiveCards}"
+              th:action="@{/seller/wallet/withdraw}"
+              th:object="${withdrawRequest}"
+              method="post">
+            <input type="hidden" th:field="*{idempotencyKey}">
+            <label for="cardId">Карта
+                <select id="cardId" th:field="*{cardId}" required>
+                    <option value="">Выберите карту</option>
+                    <option th:each="card : ${cards}"
+                            th:if="${card.active}"
+                            th:value="${card.id}"
+                            th:text="${card.maskedNumber + ' · баланс ' + card.balance + ' ₽'}">
+                        **** 0000
+                    </option>
+                </select>
+                <span class="field-error" th:if="${#fields.hasErrors('cardId')}" th:errors="*{cardId}">Ошибка карты</span>
+            </label>
+            <label for="amount">Сумма
+                <input id="amount" type="number" min="0.01" step="0.01" th:field="*{amount}" required>
+                <span class="field-error" th:if="${#fields.hasErrors('amount')}" th:errors="*{amount}">Ошибка суммы</span>
+            </label>
+            <button type="submit">Создать заявку</button>
+        </form>
+
+        <div th:unless="${hasActiveCards}">
+            <p>Для вывода нужна активная тестовая карта.</p>
+            <a class="button secondary" th:href="@{/account/cards/add}">Добавить карту</a>
+        </div>
+    </section>
+
+    <section aria-labelledby="transactions-title">
+        <h2 id="transactions-title">История операций</h2>
+        <div class="table-scroll">
+            <table>
+                <thead><tr><th>Операция</th><th>Заказ</th><th>Сумма</th><th>Статус</th><th>Создана</th></tr></thead>
+                <tbody>
+                <tr th:each="transaction : ${transactions.content}">
+                    <td th:text="${transaction.type}">SELLER_PENDINGWALLET</td>
+                    <td th:text="${transaction.orderId == null ? '—' : '#' + transaction.orderId}">—</td>
+                    <td th:text="${transaction.amount + ' ₽'}">0.00 ₽</td>
+                    <td><span class="badge" th:text="${transaction.status}">PENDING</span></td>
+                    <td th:text="${transaction.createdAt}">2026-01-01T00:00:00Z</td>
+                </tr>
+                <tr th:if="${transactions.content.isEmpty()}"><td colspan="5">Операций пока нет.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div th:replace="~{workspace/fragments :: pager(${transactions}, '/seller/wallet')}"></div>
+    </section>
+</main>
+</body>
+</html>

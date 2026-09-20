@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Кабинет продавца | MarketFlow</title>
     <link rel="stylesheet" th:href="@{/css/market.css}" href="/css/market.css">
+    <script th:src="@{/js/notifications.js}" src="/js/notifications.js" defer></script>
 </head>
 <body>
 <header class="market-header">
@@ -13,7 +14,12 @@
         <a th:href="@{/workspace/seller/orders}">Заказы</a>
         <a th:href="@{/seller/account}" href="/seller/account" aria-current="page">Мои товары</a>
         <a th:href="@{/seller/products/new}" href="/seller/products/new">Добавить товар</a>
+        <a th:href="@{/seller/wallet}" href="/seller/wallet">Кошелёк</a>
+        <a th:href="@{/notifications}" href="/notifications">
+            🔔 Уведомления <span class="notification-count" data-unread-count hidden>0</span>
+        </a>
         <a th:href="@{/account/catalog}" href="/account/catalog">Режим покупателя</a>
+        <form th:action="@{/logout}" method="post"><button type="submit">Выйти</button></form>
     </nav>
 </header>
 
