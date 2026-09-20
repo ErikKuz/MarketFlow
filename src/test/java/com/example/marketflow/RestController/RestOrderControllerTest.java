@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +29,9 @@ import com.example.marketflow.Order.OrderStatus;
 import com.example.marketflow.exception.GlobalRestExceptionHandler;
 import com.example.marketflow.exception.OrderNotFoundException;
 import com.example.marketflow.payment.PaymentStatus;
+import com.example.marketflow.messaging.MarketFlowEventType;
 import com.example.marketflow.service.OrderService;
+import com.example.marketflow.service.OrderService.OrderHistoryView;
 
 @WebMvcTest(RestOrderController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -119,6 +122,43 @@ class RestOrderControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
+    }
+
+    @Test
+    void getOrderHistoryReturnsBuyerTimeline() throws Exception {
+        UUID eventId = UUID.fromString("8b679b54-37f9-4d9a-8f5f-50e3559ed38f");
+        when(orderService.getOrderHistory(42L, BUYER_ID)).thenReturn(List.of(
+                new OrderHistoryView(
+                        eventId,
+                        MarketFlowEventType.ORDER_PAID,
+                        "Заказ оплачен",
+                        null,
+                        "CREATED",
+                        "CONFIRMED",
+                        Instant.parse("2026-09-14T10:05:00Z")
+                )
+        ));
+
+        mockMvc.perform(get("/api/v1/orders/{orderId}/history", 42L)
+                        .session(authenticatedSession()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].eventId").value(eventId.toString()))
+                .andExpect(jsonPath("$[0].eventType").value("ORDER_PAID"))
+                .andExpect(jsonPath("$[0].description").value("Заказ оплачен"))
+                .andExpect(jsonPath("$[0].previousStatus").value("CREATED"))
+                .andExpect(jsonPath("$[0].currentStatus").value("CONFIRMED"));
+
+        verify(orderService).getOrderHistory(42L, BUYER_ID);
+    }
+
+    @Test
+    void getOrderHistoryRejectsInvalidOrderId() throws Exception {
+        mockMvc.perform(get("/api/v1/orders/{orderId}/history", 0L)
+                        .session(authenticatedSession()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ORDER_ID"));
+
+        verifyNoInteractions(orderService);
     }
 
     @Test

@@ -60,6 +60,14 @@ public class WalletAccountEntity {
     )
     private BigDecimal availableBalance = BigDecimal.ZERO;
 
+    @Column(
+            name = "reserved_balance",
+            nullable = false,
+            precision = 14,
+            scale = 2
+    )
+    private BigDecimal reservedBalance = BigDecimal.ZERO;
+
     /*
      * Защищает кошелёк от одновременного изменения
      * двумя транзакциями.
@@ -88,6 +96,7 @@ public class WalletAccountEntity {
         this.type = type;
         this.pendingBalance = BigDecimal.ZERO;
         this.availableBalance = BigDecimal.ZERO;
+        this.reservedBalance = BigDecimal.ZERO;
     }
 
     public static WalletAccountEntity seller(Long sellerId) {
@@ -132,16 +141,43 @@ public class WalletAccountEntity {
     }
 
     public void withdraw(BigDecimal amount) {
-    validatePositiveAmount(amount);
+        validatePositiveAmount(amount);
 
-    if (this.availableBalance.compareTo(amount) < 0) {
-        throw new IllegalStateException(
-                "Недостаточно доступных средств"
-        );
+        if (this.availableBalance.compareTo(amount) < 0) {
+            throw new IllegalStateException(
+                    "Недостаточно доступных средств"
+            );
+        }
+
+        this.availableBalance = this.availableBalance.subtract(amount);
     }
 
-    this.availableBalance = this.availableBalance.subtract(amount);
-}
+    public void reserveWithdrawal(BigDecimal amount) {
+        validatePositiveAmount(amount);
+        if (this.availableBalance.compareTo(amount) < 0) {
+            throw new IllegalStateException("Недостаточно доступных средств");
+        }
+        this.availableBalance = this.availableBalance.subtract(amount);
+        this.reservedBalance = this.reservedBalance.add(amount);
+    }
+
+    public void completeReservedWithdrawal(BigDecimal amount) {
+        validateReservedAmount(amount);
+        this.reservedBalance = this.reservedBalance.subtract(amount);
+    }
+
+    public void cancelReservedWithdrawal(BigDecimal amount) {
+        validateReservedAmount(amount);
+        this.reservedBalance = this.reservedBalance.subtract(amount);
+        this.availableBalance = this.availableBalance.add(amount);
+    }
+
+    private void validateReservedAmount(BigDecimal amount) {
+        validatePositiveAmount(amount);
+        if (this.reservedBalance.compareTo(amount) < 0) {
+            throw new IllegalStateException("Недостаточно зарезервированных средств");
+        }
+    }
 
 
     private void validatePositiveAmount(BigDecimal amount) {

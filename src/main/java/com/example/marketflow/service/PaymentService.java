@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +75,7 @@ public class PaymentService {
 
     // Фиксируем отказ из-за недостатка средств; остальные ошибки с товаром, картой и журналом приводят к откату.
     @Transactional(noRollbackFor = InsufficientFundsException.class)
+    @CacheEvict(cacheNames = {"catalogProducts", "catalogProduct"}, allEntries = true)
     public Long payOrder(Long orderId, Long buyerId, PayOrderRequest request) {
         OrderEntity order = OR.findForPayment(orderId, buyerId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
@@ -118,7 +120,7 @@ public class PaymentService {
         order.changeStatus(OrderStatus.CONFIRMED);
         saveEvent(
                 MarketFlowEventType.ORDER_PAID,
-                RabbitMqNames.ORDER_PAID,
+                RabbitMqNames.ORDER_PAID_EVENT,
                 order,
                 null,
                 null,
@@ -131,6 +133,7 @@ public class PaymentService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = {"catalogProducts", "catalogProduct"}, allEntries = true)
     public void refundOrder(Long orderId, Long buyerId) {//отменяет оплаченный заказ
         OrderEntity order = OR.findForPayment(orderId, buyerId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
@@ -139,10 +142,12 @@ public class PaymentService {
                 && order.getPaymentStatus() == PaymentStatus.REFUNDED) {
             return;
         }
-        if (order.getStatus() != OrderStatus.CONFIRMED
-                || order.getPaymentStatus() != PaymentStatus.PAID) {
+        boolean refundableOrderState = order.getStatus() == OrderStatus.CONFIRMED
+                || order.getStatus() == OrderStatus.SELLERSSTARTWORK
+                || order.getStatus() == OrderStatus.SELLERSENDWORKANDSEND;
+        if (!refundableOrderState || order.getPaymentStatus() != PaymentStatus.PAID) {
             throw new InvalidOrderStateException(
-                    "Only a paid order that has not entered fulfillment can be refunded"
+                    "Возврат возможен только для оплаченного незакрытого заказа"
             );
         }
 
@@ -162,10 +167,9 @@ public class PaymentService {
             throw new InvalidOrderStateException("Seller order parts not found");
         }
         if (parts.stream().anyMatch(part ->
-                part.getSettlementStatus() != OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET
-                        || part.getStatus() != OBSERFFORSENDBYSELLERPRODUCTSTATUS.NEW)) {
+                part.getSettlementStatus() != OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET)) {
             throw new InvalidOrderStateException(
-                    "A refund is available only before a seller starts fulfillment"
+                    "Возврат невозможен после освобождения денег продавцу"
             );
         }
 
@@ -199,7 +203,7 @@ public class PaymentService {
         order.changeStatus(OrderStatus.CANCELLED);
         saveEvent(
                 MarketFlowEventType.ORDER_REFUNDED,
-                RabbitMqNames.ORDER_REFUNDED,
+                RabbitMqNames.ORDER_REFUNDED_EVENT,
                 order,
                 null,
                 null,
@@ -258,7 +262,7 @@ public class PaymentService {
             );
             saveEvent(
                     MarketFlowEventType.SELLER_MONEY_PENDING,
-                    RabbitMqNames.SELLER_MONEY_PENDING,
+                    RabbitMqNames.SELLER_PENDING_BALANCE_CREDITED_EVENT,
                     order,
                     part,
                     part.getSellerId(),
@@ -281,7 +285,7 @@ public class PaymentService {
                 );
                 saveEvent(
                         MarketFlowEventType.PLATFORM_COMMISSION_ADDED,
-                        RabbitMqNames.PLATFORM_COMMISSION_ADDED,
+                        RabbitMqNames.PLATFORM_COMMISSION_CREDITED_EVENT,
                         order,
                         part,
                         null,
@@ -340,10 +344,14 @@ public class PaymentService {
         }
 
         part.reverseSettlement();
-        part.transition(OBSERFFORSENDBYSELLERPRODUCTSTATUS.CANCELLED, Instant.now());
+        OBSERFFORSENDBYSELLERPRODUCTSTATUS finalStatus =
+                part.getStatus() == OBSERFFORSENDBYSELLERPRODUCTSTATUS.NEW
+                        ? OBSERFFORSENDBYSELLERPRODUCTSTATUS.CANCELLED
+                        : OBSERFFORSENDBYSELLERPRODUCTSTATUS.RETURNED;
+        part.transition(finalStatus, Instant.now());
         saveEvent(
                 MarketFlowEventType.SELLER_MONEY_RETURNED,
-                RabbitMqNames.SELLER_MONEY_RETURNED,
+                RabbitMqNames.SELLER_ACCRUAL_REVERSED_EVENT,
                 order,
                 part,
                 part.getSellerId(),
@@ -354,7 +362,7 @@ public class PaymentService {
         if (part.getCommissionAmount().signum() > 0) {
             saveEvent(
                     MarketFlowEventType.PLATFORM_COMMISSION_RETURNED,
-                    RabbitMqNames.PLATFORM_COMMISSION_RETURNED,
+                    RabbitMqNames.PLATFORM_COMMISSION_REVERSED_EVENT,
                     order,
                     part,
                     null,

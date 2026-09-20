@@ -1,6 +1,7 @@
 package com.example.marketflow.RestController;
 
 import java.net.URI;
+import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,6 +15,7 @@ import com.example.marketflow.Order.OrderDetailsDto;
 import com.example.marketflow.exception.AuthenticationRequiredException;
 import com.example.marketflow.exception.InvalidOrderIdException;
 import com.example.marketflow.service.OrderService;
+import com.example.marketflow.service.OrderService.OrderHistoryView;
 
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +61,16 @@ public class RestOrderController {
         validateOrderId(orderId);
         Long buyerId = requireBuyerId(session);
         return ResponseEntity.ok(orderService.getOrderDetails(orderId, buyerId));
+    }
+
+    @GetMapping("/{orderId}/history")
+    public ResponseEntity<List<OrderHistoryView>> getOrderHistory(
+            @PathVariable Long orderId,
+            HttpSession session
+    ) {
+        validateOrderId(orderId);
+        Long buyerId = requireBuyerId(session);
+        return ResponseEntity.ok(orderService.getOrderHistory(orderId, buyerId));
     }
 
     @PostMapping("/{orderId}/cancel")

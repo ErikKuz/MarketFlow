@@ -20,6 +20,7 @@ import org.testcontainers.rabbitmq.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import com.example.marketflow.config.RabbitMqConfig;
+import com.example.marketflow.messaging.command.MarketFlowCommand;
 
 @Testcontainers(disabledWithoutDocker = true)
 class RabbitMqIntegrationTest {
@@ -61,11 +62,11 @@ class RabbitMqIntegrationTest {
                 "PROCESSING", "PAID", Instant.now()
         );
 
-        rabbitTemplate.convertAndSend(RabbitMqNames.EVENTS_EXCHANGE, RabbitMqNames.ORDER_PAID, event);
+        rabbitTemplate.convertAndSend(RabbitMqNames.BUSINESS_EVENTS_EXCHANGE, RabbitMqNames.ORDER_PAID_EVENT, event);
 
-        assertReceived(event, RabbitMqNames.EVENT_HISTORY_QUEUE);
-        assertReceived(event, RabbitMqNames.BUYER_NOTIFICATIONS_QUEUE);
-        assertReceived(event, RabbitMqNames.SELLER_NOTIFICATIONS_QUEUE);
+        assertReceived(event, RabbitMqNames.ORDER_EVENT_HISTORY_QUEUE);
+        assertReceived(event, RabbitMqNames.BUYER_NOTIFICATION_QUEUE);
+        assertReceived(event, RabbitMqNames.SELLER_NOTIFICATION_QUEUE);
 
         rabbitTemplate.convertAndSend(
                 RabbitMqNames.DEAD_LETTER_EXCHANGE,
@@ -73,6 +74,25 @@ class RabbitMqIntegrationTest {
                 event
         );
         assertReceived(event, RabbitMqNames.DEAD_LETTER_QUEUE);
+    }
+
+    @Test
+    void withdrawalCommandReachesOnlyWithdrawalQueue() {
+        MarketFlowCommand command = MarketFlowCommand.withdrawal(
+                81L, 7L, 15L, new java.math.BigDecimal("60.00"), Instant.now()
+        );
+
+        rabbitTemplate.convertAndSend(
+                RabbitMqNames.MONEY_COMMANDS_EXCHANGE,
+                RabbitMqNames.REQUEST_SELLER_WITHDRAWAL_COMMAND,
+                command
+        );
+
+        Object received = rabbitTemplate.receiveAndConvert(RabbitMqNames.SELLER_WITHDRAWAL_QUEUE, 5_000);
+        MarketFlowCommand delivered = assertInstanceOf(MarketFlowCommand.class, received);
+        assertEquals(command.commandId(), delivered.commandId());
+        assertEquals(command.commandType(), delivered.commandType());
+        assertEquals(null, rabbitTemplate.receiveAndConvert(RabbitMqNames.SELLER_FUNDS_RELEASE_QUEUE, 200));
     }
 
     private void assertReceived(MarketFlowEvent expected, String queue) {

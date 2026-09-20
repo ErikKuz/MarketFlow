@@ -3,6 +3,8 @@ package com.example.marketflow.service;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,7 @@ public class OrderService {
     private final OrderWorkflowService workflow;
     private final PaymentService paymentService;
     private final OutboxService outboxService;
+    private final OrderEventHistoryRepository orderEventHistoryRepository;
 
     @Transactional
     public Long createOrder(Long buyerId) {
@@ -70,7 +73,7 @@ public class OrderService {
                 null,
                 OrderStatus.CREATED.name(),
                 Instant.now()
-        ), RabbitMqNames.ORDER_CREATED);
+        ), RabbitMqNames.ORDER_CREATED_EVENT);
         return order.getId();
     }
 
@@ -81,13 +84,26 @@ public class OrderService {
         return OrderMapper.toDetailsDto(order, orderItemRepository.findAllByOrderId(orderId));
     }
 
+    @Transactional(readOnly = true)
+    public List<OrderHistoryView> getOrderHistory(Long orderId, Long buyerId) {
+        orderRepository.findByIdAndBuyerId(orderId, buyerId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        return orderEventHistoryRepository.findAllByOrderIdOrderByOccurredAtAscIdAsc(orderId)
+                .stream()
+                .map(OrderHistoryView::of)
+                .toList();
+    }
+
     @Transactional
     public void cancelOrder(Long orderId, Long buyerId) {
         var order = orderRepository.findForPayment(orderId, buyerId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
         if (order.getStatus() == OrderStatus.CANCELLED) return;
-        if (order.getStatus() == OrderStatus.CONFIRMED
-                && order.getPaymentStatus() == PaymentStatus.PAID) {
+        boolean refundablePaidOrder = order.getPaymentStatus() == PaymentStatus.PAID
+                && (order.getStatus() == OrderStatus.CONFIRMED
+                    || order.getStatus() == OrderStatus.SELLERSSTARTWORK
+                    || order.getStatus() == OrderStatus.SELLERSENDWORKANDSEND);
+        if (refundablePaidOrder) {
             paymentService.refundOrder(orderId, buyerId);
             return;
         }
@@ -109,6 +125,49 @@ public class OrderService {
                 previousStatus.name(),
                 OrderStatus.CANCELLED.name(),
                 Instant.now()
-        ), RabbitMqNames.ORDER_CANCELLED);
+        ), RabbitMqNames.ORDER_CANCELLED_EVENT);
+    }
+
+    public record OrderHistoryView(
+            UUID eventId,
+            MarketFlowEventType eventType,
+            String description,
+            Long sellerOrderId,
+            String previousStatus,
+            String currentStatus,
+            Instant occurredAt
+    ) {
+        static OrderHistoryView of(
+                com.example.marketflow.messaging.history.OrderEventHistoryEntity history
+        ) {
+            return new OrderHistoryView(
+                    history.getEventId(),
+                    history.getEventType(),
+                    description(history.getEventType()),
+                    history.getSellerOrderId(),
+                    history.getPreviousStatus(),
+                    history.getCurrentStatus(),
+                    history.getOccurredAt()
+            );
+        }
+
+        private static String description(MarketFlowEventType type) {
+            return switch (type) {
+                case ORDER_CREATED -> "Заказ создан";
+                case ORDER_PAID -> "Заказ оплачен";
+                case ORDER_CANCELLED -> "Заказ отменён";
+                case ORDER_COMPLETED -> "Заказ завершён";
+                case ORDER_REFUNDED -> "Деньги за заказ возвращены";
+                case SELLER_STARTED_WORK -> "Продавец начал обработку товара";
+                case SELLER_SENT_PRODUCT -> "Продавец отправил товар";
+                case USER_RECEIVED_PRODUCT -> "Покупатель получил товар";
+                case SELLER_MONEY_PENDING -> "Деньги начислены продавцу в ожидающий баланс";
+                case PLATFORM_COMMISSION_ADDED -> "Платформе начислена комиссия";
+                case SELLER_MONEY_AVAILABLE -> "Деньги продавца стали доступны для вывода";
+                case SELLER_WITHDRAWAL_COMPLETED -> "Продавец вывел деньги";
+                case SELLER_MONEY_RETURNED -> "Начисление продавцу отменено";
+                case PLATFORM_COMMISSION_RETURNED -> "Комиссия платформы возвращена";
+            };
+        }
     }
 }

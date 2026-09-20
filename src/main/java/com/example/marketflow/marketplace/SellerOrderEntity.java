@@ -66,9 +66,12 @@ public class SellerOrderEntity {
         boolean allowed = switch (status) {
             case NEW -> next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.PROCESSING
                     || next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.CANCELLED;
-            case PROCESSING -> next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.SELLERSENDPRODUCT;
-            case SELLERSENDPRODUCT -> next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT;
-            case USERGETPRODUCT, CANCELLED, RETURNED -> false;
+            case PROCESSING -> next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.SELLERSENDPRODUCT
+                    || next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.RETURNED;
+            case SELLERSENDPRODUCT -> next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT
+                    || next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.RETURNED;
+            case USERGETPRODUCT -> next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.RETURNED;
+            case CANCELLED, RETURNED -> false;
         };
         if (!allowed) throw MarketplaceException.conflict("Fulfillment cannot change from " + status + " to " + next);
         status = next;

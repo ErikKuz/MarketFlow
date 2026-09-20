@@ -28,7 +28,7 @@ public class SellerNotificationListener {
     private final SellerOrderRepository sellerOrderRepository;
     private final Clock clock;
 
-    @RabbitListener(queues = RabbitMqNames.SELLER_NOTIFICATIONS_QUEUE)
+    @RabbitListener(queues = RabbitMqNames.SELLER_NOTIFICATION_QUEUE)
     @Transactional
     public void handle(MarketFlowEvent event) {
         String title = switch (event.eventType()) {

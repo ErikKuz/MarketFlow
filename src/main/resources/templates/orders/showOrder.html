@@ -13,6 +13,7 @@
         <a th:href="@{/account/catalog}" href="/account/catalog">Каталог</a>
         <a th:href="@{/account/cart}" href="/account/cart">Корзина</a>
         <a th:href="@{/account/account/cards}" href="/account/account/cards">Карты</a>
+        <a th:if="${isSeller}" th:href="@{/seller/account}" href="/seller/account">Кабинет продавца</a>
         <a th:href="@{/Buyer/account}" href="/Buyer/account">Профиль</a>
     </nav>
 </header>
@@ -164,6 +165,34 @@
            th:if="${order.paymentStatus.name() == 'PAID'}">
             Заказ уже оплачен.
         </p>
+    </section>
+
+    <section class="order-history-section" aria-labelledby="order-history-title">
+        <div class="order-section-heading">
+            <div>
+                <p class="eyebrow">История заказа</p>
+                <h2 id="order-history-title">Что происходило с заказом</h2>
+            </div>
+        </div>
+
+        <ol class="order-history" th:if="${history != null and !history.isEmpty()}">
+            <li class="order-history-item" th:each="event : ${history}">
+                <time th:datetime="${event.occurredAt}" th:text="${event.occurredAt}">
+                    2026-09-03T10:00:00Z
+                </time>
+                <strong th:text="${event.description}">Заказ создан</strong>
+                <span class="muted"
+                      th:if="${event.sellerOrderId != null}"
+                      th:text="${'Часть продавца №' + event.sellerOrderId}">
+                    Часть продавца №1
+                </span>
+            </li>
+        </ol>
+
+        <div class="empty-state" th:if="${history == null or history.isEmpty()}">
+            <h2>Событий пока нет</h2>
+            <p class="muted">История появится после обработки событий RabbitMQ.</p>
+        </div>
     </section>
 </main>
 </body>

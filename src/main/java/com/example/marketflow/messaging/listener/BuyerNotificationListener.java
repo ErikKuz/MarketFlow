@@ -25,7 +25,7 @@ public class BuyerNotificationListener {
     private final NotificationRepository notificationRepository;
     private final Clock clock;
 
-    @RabbitListener(queues = RabbitMqNames.BUYER_NOTIFICATIONS_QUEUE)
+    @RabbitListener(queues = RabbitMqNames.BUYER_NOTIFICATION_QUEUE)
     @Transactional
     public void handle(MarketFlowEvent event) {
         if (event.buyerId() == null

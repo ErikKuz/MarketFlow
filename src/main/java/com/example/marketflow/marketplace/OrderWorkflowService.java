@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -33,6 +34,8 @@ import com.example.marketflow.payment.WalletType;
 import com.example.marketflow.messaging.MarketFlowEvent;
 import com.example.marketflow.messaging.MarketFlowEventType;
 import com.example.marketflow.messaging.RabbitMqNames;
+import com.example.marketflow.messaging.command.MarketFlowCommand;
+import com.example.marketflow.messaging.command.MarketFlowCommand.CommandType;
 import com.example.marketflow.messaging.outbox.OutboxService;
 
 import lombok.RequiredArgsConstructor;
@@ -134,8 +137,8 @@ public class OrderWorkflowService {
                 ? MarketFlowEventType.SELLER_STARTED_WORK
                 : MarketFlowEventType.SELLER_SENT_PRODUCT;
         String routingKey = next == OBSERFFORSENDBYSELLERPRODUCTSTATUS.PROCESSING
-                ? RabbitMqNames.SELLER_STARTED_WORK
-                : RabbitMqNames.SELLER_SENT_PRODUCT;
+                ? RabbitMqNames.SELLER_STARTED_ORDER_PROCESSING_EVENT
+                : RabbitMqNames.SELLER_SENT_PRODUCT_EVENT;
         saveEvent(
                 eventType, routingKey, order, part, null,
                 previousPartStatus.name(), next.name()
@@ -162,48 +165,112 @@ public class OrderWorkflowService {
         if (order.getPaymentStatus() != PaymentStatus.PAID) {
             throw new InvalidOrderStateException("Only a paid shipment can be received");
         }
-        if (part.getStatus() == OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT) return;
+        if (part.getStatus() == OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT) {
+            if (part.getSettlementStatus()
+                    == OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET) {
+                queueSellerFundsRelease(order, part);
+            }
+            return;
+        }
         if (order.getStatus() != OrderStatus.SELLERSSTARTWORK
                 && order.getStatus() != OrderStatus.SELLERSENDWORKANDSEND) {
             throw new InvalidOrderStateException("The order is not being delivered");
         }
         var previousPartStatus = part.getStatus();
         part.transition(OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT, clock.instant());
-        TrounseferMoneyFromPendingInMainWallet(part);
+        queueSellerFundsRelease(order, part);
         saveEvent(
                 MarketFlowEventType.USER_RECEIVED_PRODUCT,
-                RabbitMqNames.USER_RECEIVED_PRODUCT,
+                RabbitMqNames.BUYER_RECEIVED_PRODUCT_EVENT,
                 order,
                 part,
                 null,
                 previousPartStatus.name(),
                 OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT.name()
         );
+        CheckSELLERSENDWORKANDSEND(order);
+        if (SOR.findAllByOrderIdOrderBySellerId(orderId).stream()
+                .allMatch(p -> p.getStatus() == OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT)) {
+            order.recordDelivery(clock.instant());
+        }
+    }
+
+    private void queueSellerFundsRelease(OrderEntity order, SellerOrderEntity part) {
+        outboxService.saveCommand(MarketFlowCommand.releaseSellerFunds(
+                order.getId(),
+                part.getId(),
+                part.getSellerId(),
+                part.getSellerAmount(),
+                clock.instant()
+        ), RabbitMqNames.RELEASE_SELLER_FUNDS_COMMAND);
+    }
+
+    @Transactional
+    public void releaseSellerFunds(MarketFlowCommand command) {
+        if (command.commandType() != CommandType.RELEASE_SELLER_FUNDS) {
+            throw new IllegalArgumentException("Получена команда другого типа");
+        }
+
+        OrderEntity order = OR.findLocked(command.orderId())
+                .orElseThrow(() -> new OrderNotFoundException(command.orderId()));
+        SellerOrderEntity part = SOR.findLockedById(command.sellerOrderId())
+                .orElseThrow(() -> MarketplaceException.missing("Часть заказа продавца не найдена"));
+        if (!Objects.equals(part.getOrderId(), command.orderId())
+                || !Objects.equals(part.getSellerId(), command.sellerId())
+                || part.getSellerAmount().compareTo(command.amount()) != 0) {
+            throw new InvalidOrderStateException("Команда освобождения не соответствует части заказа");
+        }
+        if (part.getSettlementStatus() == OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.RETURNMONEY) {
+            return;
+        }
+        if (part.getSettlementStatus() == OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET) {
+            completeOrderWhenAllFundsReleased(order);
+            return;
+        }
+        if (part.getStatus() != OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT
+                || part.getSettlementStatus()
+                != OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET) {
+            throw new InvalidOrderStateException("Деньги этой части заказа пока нельзя освободить");
+        }
+        TrounseferMoneyFromPendingInMainWallet(part);
         saveEvent(
                 MarketFlowEventType.SELLER_MONEY_AVAILABLE,
-                RabbitMqNames.SELLER_MONEY_AVAILABLE,
+                RabbitMqNames.SELLER_FUNDS_RELEASED_EVENT,
                 order,
                 part,
                 part.getSellerAmount(),
                 OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET.name(),
                 OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET.name()
         );
-        CheckSELLERSENDWORKANDSEND(order);
-        if (SOR.findAllByOrderIdOrderBySellerId(orderId).stream()
-                .allMatch(p -> p.getStatus() == OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT)) {
-            OrderStatus previousOrderStatus = order.getStatus();
-            order.changeStatus(OrderStatus.COMPLETED);
-            order.recordDelivery(clock.instant());
-            saveEvent(
-                    MarketFlowEventType.ORDER_COMPLETED,
-                    RabbitMqNames.ORDER_COMPLETED,
-                    order,
-                    null,
-                    order.getTotalPrice(),
-                    previousOrderStatus.name(),
-                    OrderStatus.COMPLETED.name()
-            );
+        completeOrderWhenAllFundsReleased(order);
+    }
+
+    private void completeOrderWhenAllFundsReleased(OrderEntity order) {
+        if (order.getStatus() == OrderStatus.COMPLETED || order.getStatus() == OrderStatus.CANCELLED) {
+            return;
         }
+        var parts = SOR.findAllByOrderIdOrderBySellerId(order.getId());
+        boolean completed = !parts.isEmpty() && parts.stream().allMatch(part ->
+                part.getStatus() == OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT
+                        && part.getSettlementStatus()
+                        == OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET);
+        if (!completed) {
+            return;
+        }
+        OrderStatus previousOrderStatus = order.getStatus();
+        order.changeStatus(OrderStatus.COMPLETED);
+        if (order.getDeliveredAt() == null) {
+            order.recordDelivery(clock.instant());
+        }
+        saveEvent(
+                MarketFlowEventType.ORDER_COMPLETED,
+                RabbitMqNames.ORDER_COMPLETED_EVENT,
+                order,
+                null,
+                order.getTotalPrice(),
+                previousOrderStatus.name(),
+                OrderStatus.COMPLETED.name()
+        );
     }
 
     private void TrounseferMoneyFromPendingInMainWallet(SellerOrderEntity part) {

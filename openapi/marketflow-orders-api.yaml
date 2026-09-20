@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: MarketFlow Orders API
-  version: 0.3.0
+  version: 0.4.0
   description: >
     Multi-seller MVP. Prices are snapshotted at creation and stock is debited at
     payment. Each seller ships their own part. The overall order completes only
@@ -95,6 +95,32 @@ paths:
         '404':
           $ref: '#/components/responses/ResourceNotFound'
 
+  /api/v1/orders/{orderId}/history:
+    get:
+      tags: [Orders]
+      summary: Get the event history of the buyer's own order
+      description: Returns asynchronously recorded RabbitMQ events in chronological order.
+      operationId: getOrderHistory
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order event history, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderHistoryView'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+
   /api/v1/orders/{orderId}/cancel:
     post:
       tags: [Orders]
@@ -146,7 +172,10 @@ paths:
     post:
       tags: [Orders]
       summary: Confirm receipt of one shipped seller part
-      description: Releases this part's seller funds and platform commission from pending to available balances.
+      description: >
+        Marks the part as USERGETPRODUCT and transactionally stores a RELEASE_SELLER_FUNDS
+        outbox command. Funds remain in pending balances until the RabbitMQ settlement consumer
+        moves seller funds and platform commission to available balances.
       operationId: receiveSellerOrder
       parameters:
         - $ref: '#/components/parameters/OrderId'
@@ -154,7 +183,7 @@ paths:
         - $ref: '#/components/parameters/CsrfToken'
       responses:
         '204':
-          description: Receipt confirmed; repeating it is a no-op
+          description: Receipt confirmed and release command queued; repeating it is a no-op
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -336,6 +365,19 @@ components:
           items:
             $ref: '#/components/schemas/OrderItem'
 
+    OrderHistoryView:
+      type: object
+      required: [eventId, eventType, description, occurredAt]
+      properties:
+        eventId: { type: string, format: uuid }
+        eventType:
+          $ref: '#/components/schemas/MarketFlowEventType'
+        description: { type: string, minLength: 1 }
+        sellerOrderId: { type: integer, format: int64, minimum: 1, nullable: true }
+        previousStatus: { type: string, nullable: true }
+        currentStatus: { type: string, nullable: true }
+        occurredAt: { type: string, format: date-time }
+
     OrderItem:
       type: object
       required: [productId, sellerId, productName, unitPrice, quantity, totalPrice]
@@ -400,6 +442,24 @@ components:
     PaymentStatus:
       type: string
       enum: [NOT_PAID, PROCESSING, PAID, FAILED, REFUNDED]
+
+    MarketFlowEventType:
+      type: string
+      enum:
+        - ORDER_CREATED
+        - ORDER_PAID
+        - ORDER_CANCELLED
+        - ORDER_COMPLETED
+        - ORDER_REFUNDED
+        - SELLER_STARTED_WORK
+        - SELLER_SENT_PRODUCT
+        - USER_RECEIVED_PRODUCT
+        - SELLER_MONEY_PENDING
+        - PLATFORM_COMMISSION_ADDED
+        - SELLER_MONEY_AVAILABLE
+        - SELLER_WITHDRAWAL_COMPLETED
+        - SELLER_MONEY_RETURNED
+        - PLATFORM_COMMISSION_RETURNED
 
     OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS:
       type: string

@@ -2,14 +2,15 @@ openapi: 3.0.3
 
 info:
   title: MarketFlow Order Payments API
-  version: 0.3.0
+  version: 0.4.0
   description: >
     Simulated card payment, not a banking integration. In one transaction it debits stock
     and the buyer card, records PAYMENT, accrues seller funds and platform commission to
     pending wallet balances, and records the corresponding ledger entries.
     Reusing a successful key with the same order, user and card returns the original result.
     A failed balance-check key remains failed; use a new key after adding funds.
-    A seller can withdraw available virtual funds to their own simulated card.
+    Seller withdrawal is asynchronous: the request creates a PENDING transaction and an
+    outbox command, and a RabbitMQ consumer later moves the virtual funds to the simulated card.
 
 servers:
   - url: http://localhost:8080
@@ -17,6 +18,7 @@ servers:
 tags:
   - name: Payments
   - name: Wallets
+  - name: Platform wallet
 
 security:
   - sessionCookie: []
@@ -68,10 +70,44 @@ paths:
         '404': { $ref: '#/components/responses/PaymentResourceNotFound' }
         '409': { $ref: '#/components/responses/PaymentConflict' }
 
+  /api/v1/wallet:
+    get:
+      tags: [Wallets]
+      summary: Get the authenticated seller's virtual wallet
+      operationId: getSellerWallet
+      responses:
+        '200':
+          description: Seller wallet balances
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletView' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/WalletNotFound' }
+
+  /api/v1/wallet/transactions:
+    get:
+      tags: [Wallets]
+      summary: Get the authenticated seller's wallet transaction history
+      operationId: getSellerWalletTransactions
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Seller wallet transactions, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletTransactionPage' }
+        '400': { $ref: '#/components/responses/InvalidPagination' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/WalletNotFound' }
+
   /api/v1/wallet/withdraw:
     post:
       tags: [Wallets]
-      summary: Withdraw available seller funds to a simulated card
+      summary: Request withdrawal of available seller funds to a simulated card
       operationId: withdrawSellerFunds
       parameters:
         - name: X-CSRF-TOKEN
@@ -85,13 +121,76 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/WithdrawRequest' }
       responses:
-        '204':
-          description: Funds withdrawn; an identical repeated request is a no-op
+        '202':
+          description: Withdrawal command accepted; an identical repeated request is a no-op
+          headers:
+            Location:
+              description: URL used to check the asynchronous withdrawal status
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WithdrawalView' }
         '400': { $ref: '#/components/responses/ValidationErrorResponse' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/PaymentResourceNotFound' }
         '409': { $ref: '#/components/responses/PaymentConflict' }
+
+  /api/v1/wallet/withdrawals/{transactionId}:
+    get:
+      tags: [Wallets]
+      summary: Get an asynchronous withdrawal status
+      operationId: getSellerWithdrawal
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+      responses:
+        '200':
+          description: Withdrawal owned by the authenticated seller
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WithdrawalView' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/PaymentResourceNotFound' }
+
+  /api/v1/platform/wallet:
+    get:
+      tags: [Platform wallet]
+      summary: Get the MarketFlow platform wallet
+      description: Available only to a user with the OWNER role.
+      operationId: getPlatformWallet
+      responses:
+        '200':
+          description: Platform pending and available commission balances
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletView' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/WalletNotFound' }
+
+  /api/v1/platform/wallet/transactions:
+    get:
+      tags: [Platform wallet]
+      summary: Get the platform commission and reversal history
+      description: Available only to a user with the OWNER role.
+      operationId: getPlatformWalletTransactions
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Platform wallet transactions, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletTransactionPage' }
+        '400': { $ref: '#/components/responses/InvalidPagination' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/WalletNotFound' }
 
 components:
   securitySchemes:
@@ -106,6 +205,14 @@ components:
       in: path
       required: true
       schema: { type: integer, format: int64, minimum: 1 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
 
   schemas:
     PayOrderRequest:
@@ -151,6 +258,62 @@ components:
         maskedNumber: { type: string, minLength: 1, maxLength: 30 }
         balance: { type: number, minimum: 0, multipleOf: 0.01 }
 
+    WalletView:
+      type: object
+      required: [id, type, pendingBalance, availableBalance, reservedBalance, updatedAt]
+      properties:
+        id: { type: integer, format: int64, minimum: 1 }
+        type: { type: string, enum: [SELLER, PLATFORM] }
+        pendingBalance: { type: number, minimum: 0, multipleOf: 0.01 }
+        availableBalance: { type: number, minimum: 0, multipleOf: 0.01 }
+        reservedBalance:
+          type: number
+          minimum: 0
+          multipleOf: 0.01
+          description: Funds reserved while an asynchronous withdrawal is being processed
+        updatedAt: { type: string, format: date-time }
+
+    WithdrawalView:
+      type: object
+      required: [transactionId, cardId, amount, status, idempotencyKey, createdAt]
+      properties:
+        transactionId: { type: integer, format: int64, minimum: 1 }
+        cardId: { type: integer, format: int64, minimum: 1 }
+        amount: { type: number, minimum: 0, exclusiveMinimum: true, multipleOf: 0.01 }
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED]
+        idempotencyKey: { type: string, minLength: 1, maxLength: 150 }
+        createdAt: { type: string, format: date-time }
+
+    WalletTransactionView:
+      type: object
+      required: [id, type, amount, status, createdAt]
+      properties:
+        id: { type: integer, format: int64, minimum: 1 }
+        orderId: { type: integer, format: int64, minimum: 1, nullable: true }
+        sellerOrderId: { type: integer, format: int64, minimum: 1, nullable: true }
+        type:
+          type: string
+          enum: [PAYMENT, SELLER_PENDINGWALLET, PLATFORM_COMMISSION, SELLER_MAINWALLET, SELLER_TRANSFERMONEYFROMMAINWALLET, RETURNMONEY, SELLER_RETURNMONEY, PLATFORM_RETURMONEY]
+        amount: { type: number, minimum: 0, exclusiveMinimum: true, multipleOf: 0.01 }
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED, REFUNDED, REVERSED]
+        createdAt: { type: string, format: date-time }
+
+    WalletTransactionPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/WalletTransactionView' }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+
     ApiError:
       type: object
       required: [timestamp, status, code, message, path, validationErrors]
@@ -180,6 +343,11 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ApiError' }
+    InvalidPagination:
+      description: Page or size has an invalid value
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
     AuthenticationRequired:
       description: Authentication is required
       content:
@@ -192,6 +360,11 @@ components:
           schema: { $ref: '#/components/schemas/ApiError' }
     PaymentResourceNotFound:
       description: Order or selected payment card was not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    WalletNotFound:
+      description: The seller or platform wallet was not found
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ApiError' }

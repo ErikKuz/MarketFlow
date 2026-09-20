@@ -128,4 +128,24 @@ public class PaymentTransactionEntity {//он фиксирует, что ден�
         return paymentCardId;
     }
 
+    public void markCompleted() {
+        if (status == TransactionStatus.COMPLETED) {
+            return;
+        }
+        if (status != TransactionStatus.PENDING) {
+            throw new IllegalStateException("Завершить можно только ожидающую операцию");
+        }
+        status = TransactionStatus.COMPLETED;
+    }
+
+    public void markFailed() {
+        if (status == TransactionStatus.FAILED) {
+            return;
+        }
+        if (status != TransactionStatus.PENDING) {
+            throw new IllegalStateException("Отклонить можно только ожидающую операцию");
+        }
+        status = TransactionStatus.FAILED;
+    }
+
 }

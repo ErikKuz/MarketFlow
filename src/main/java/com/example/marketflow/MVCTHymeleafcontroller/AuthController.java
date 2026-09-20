@@ -15,7 +15,6 @@ import com.example.marketflow.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import org.springframework.security.core.Authentication;
 
 @Controller
 public class AuthController {
@@ -81,16 +80,4 @@ public class AuthController {
                 : "redirect:/Buyer/account";
     }
 
-    @PostMapping("/logout")
-    public String logout(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            Authentication authentication
-    ) {
-        sessionAuthenticationService.logout(request, response, authentication);
-        return "redirect:/";
-    }
-    
-
-    
 }

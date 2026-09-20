@@ -51,6 +51,7 @@ public class OrderController {
                 orderService.getOrderDetails(orderId, buyerId);
 
         model.addAttribute("order", order);
+        model.addAttribute("history", orderService.getOrderHistory(orderId, buyerId));
 
         return "orders/showOrder";
     }

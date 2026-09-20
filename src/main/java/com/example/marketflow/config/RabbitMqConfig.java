@@ -23,7 +23,7 @@ import com.example.marketflow.messaging.RabbitMqNames;
 @EnableRabbit
 @EnableScheduling
 public class RabbitMqConfig {
-
+//Он автоматически создаёт и связывает exchange с q ,routing 
     @Bean
     public MessageConverter rabbitMessageConverter() {
         return new JacksonJsonMessageConverter();
@@ -31,37 +31,44 @@ public class RabbitMqConfig {
 
     @Bean
     public Declarables marketFlowRabbitDeclarables() {
-        TopicExchange events = new TopicExchange(RabbitMqNames.EVENTS_EXCHANGE, true, false);
+        TopicExchange events = new TopicExchange(RabbitMqNames.BUSINESS_EVENTS_EXCHANGE, true, false);
+        TopicExchange commands = new TopicExchange(RabbitMqNames.MONEY_COMMANDS_EXCHANGE, true, false);
+        //rror message
         TopicExchange deadLetters = new TopicExchange(RabbitMqNames.DEAD_LETTER_EXCHANGE, true, false);
 
-        Queue history = queueWithDeadLetters(RabbitMqNames.EVENT_HISTORY_QUEUE);
-        Queue buyers = queueWithDeadLetters(RabbitMqNames.BUYER_NOTIFICATIONS_QUEUE);
-        Queue sellers = queueWithDeadLetters(RabbitMqNames.SELLER_NOTIFICATIONS_QUEUE);
+        Queue history = queueWithDeadLetters(RabbitMqNames.ORDER_EVENT_HISTORY_QUEUE);
+        Queue buyers = queueWithDeadLetters(RabbitMqNames.BUYER_NOTIFICATION_QUEUE);
+        Queue sellers = queueWithDeadLetters(RabbitMqNames.SELLER_NOTIFICATION_QUEUE);
+        Queue withdrawals = queueWithDeadLetters(RabbitMqNames.SELLER_WITHDRAWAL_QUEUE);
+        Queue settlements = queueWithDeadLetters(RabbitMqNames.SELLER_FUNDS_RELEASE_QUEUE);
         Queue deadLetterQueue = QueueBuilder.durable(RabbitMqNames.DEAD_LETTER_QUEUE).build();
 
         List<Declarable> declarables = new java.util.ArrayList<>(List.of(
-                events, deadLetters, history, buyers, sellers, deadLetterQueue,
+                events, commands, deadLetters, history, buyers, sellers,
+                withdrawals, settlements, deadLetterQueue,
                 binding(history, events, "order.#"),
                 binding(history, events, "seller-order.#"),
                 binding(history, events, "money.#"),
-                binding(buyers, events, RabbitMqNames.ORDER_CREATED),
-                binding(buyers, events, RabbitMqNames.ORDER_PAID),
-                binding(buyers, events, RabbitMqNames.SELLER_SENT_PRODUCT),
-                binding(buyers, events, RabbitMqNames.ORDER_COMPLETED),
-                binding(buyers, events, RabbitMqNames.ORDER_CANCELLED),
-                binding(buyers, events, RabbitMqNames.ORDER_REFUNDED),
-                binding(sellers, events, RabbitMqNames.ORDER_PAID),
-                binding(sellers, events, RabbitMqNames.USER_RECEIVED_PRODUCT),
+                binding(buyers, events, RabbitMqNames.ORDER_CREATED_EVENT),
+                binding(buyers, events, RabbitMqNames.ORDER_PAID_EVENT),
+                binding(buyers, events, RabbitMqNames.SELLER_SENT_PRODUCT_EVENT),
+                binding(buyers, events, RabbitMqNames.ORDER_COMPLETED_EVENT),
+                binding(buyers, events, RabbitMqNames.ORDER_CANCELLED_EVENT),
+                binding(buyers, events, RabbitMqNames.ORDER_REFUNDED_EVENT),
+                binding(sellers, events, RabbitMqNames.ORDER_PAID_EVENT),
+                binding(sellers, events, RabbitMqNames.BUYER_RECEIVED_PRODUCT_EVENT),
                 binding(sellers, events, "money.seller.#"),
-                binding(sellers, events, RabbitMqNames.ORDER_COMPLETED),
-                binding(sellers, events, RabbitMqNames.ORDER_CANCELLED),
-                binding(sellers, events, RabbitMqNames.ORDER_REFUNDED),
+                binding(sellers, events, RabbitMqNames.ORDER_COMPLETED_EVENT),
+                binding(sellers, events, RabbitMqNames.ORDER_CANCELLED_EVENT),
+                binding(sellers, events, RabbitMqNames.ORDER_REFUNDED_EVENT),
+                binding(withdrawals, commands, RabbitMqNames.REQUEST_SELLER_WITHDRAWAL_COMMAND),
+                binding(settlements, commands, RabbitMqNames.RELEASE_SELLER_FUNDS_COMMAND),
                 binding(deadLetterQueue, deadLetters, "#")
         ));
         return new Declarables(declarables);
     }
 
-    private Queue queueWithDeadLetters(String name) {
+    private Queue queueWithDeadLetters(String name) {//Если не удалось обработать сообщение то оно идет в dead letter que
         return QueueBuilder.durable(name)
                 .withArguments(Map.of(
                         "x-dead-letter-exchange", RabbitMqNames.DEAD_LETTER_EXCHANGE,

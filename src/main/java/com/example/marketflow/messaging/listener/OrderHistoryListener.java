@@ -25,7 +25,7 @@ public class OrderHistoryListener {
     private final OrderEventHistoryRepository historyRepository;
     private final Clock clock;
 
-    @RabbitListener(queues = RabbitMqNames.EVENT_HISTORY_QUEUE)
+    @RabbitListener(queues = RabbitMqNames.ORDER_EVENT_HISTORY_QUEUE)
     @Transactional
     public void handle(MarketFlowEvent event) {
         if (!historyRepository.existsByEventId(event.eventId())) {

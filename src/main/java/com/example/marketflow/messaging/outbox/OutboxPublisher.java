@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.example.marketflow.Repository.OutboxEventRepository;
 import com.example.marketflow.messaging.MarketFlowEvent;
 import com.example.marketflow.messaging.RabbitMqNames;
+import com.example.marketflow.messaging.command.MarketFlowCommand;
+import com.example.marketflow.service.WalletService;
 
 import lombok.RequiredArgsConstructor;
 import tools.jackson.databind.ObjectMapper;
@@ -29,6 +31,7 @@ public class OutboxPublisher {
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final WalletService walletService;
 
     @Value("${marketflow.outbox.batch-size:50}")
     private int batchSize;
@@ -56,12 +59,15 @@ public class OutboxPublisher {
 
     private void publish(OutboxEventEntity entity, Instant now) {
         try {
-            MarketFlowEvent event = objectMapper.readValue(entity.getPayload(), MarketFlowEvent.class);
+            boolean command = entity.getRoutingKey().startsWith("command.");
+            Object message = command
+                    ? objectMapper.readValue(entity.getPayload(), MarketFlowCommand.class)
+                    : objectMapper.readValue(entity.getPayload(), MarketFlowEvent.class);
             CorrelationData correlation = new CorrelationData(entity.getEventId().toString());
             rabbitTemplate.convertAndSend(
-                    RabbitMqNames.EVENTS_EXCHANGE,
+                    command ? RabbitMqNames.MONEY_COMMANDS_EXCHANGE : RabbitMqNames.BUSINESS_EVENTS_EXCHANGE,
                     entity.getRoutingKey(),
-                    event,
+                    message,
                     correlation
             );
             CorrelationData.Confirm confirm = correlation.getFuture()//получается Future — объект, в котором позже появится ответ RabbitMQ.
@@ -83,6 +89,19 @@ public class OutboxPublisher {
                     now.plusSeconds(delaySeconds),
                     maxAttempts
             );
+            cancelWithdrawalIfPublishingPermanentlyFailed(entity);
         }
+    }
+
+    private void cancelWithdrawalIfPublishingPermanentlyFailed(OutboxEventEntity entity) {
+        if (entity.getStatus() != OutboxStatus.FAILED
+                || !RabbitMqNames.REQUEST_SELLER_WITHDRAWAL_COMMAND.equals(entity.getRoutingKey())) {
+            return;
+        }
+        MarketFlowCommand command = objectMapper.readValue(
+                entity.getPayload(),
+                MarketFlowCommand.class
+        );
+        walletService.cancelUnpublishedWithdrawal(command);
     }
 }

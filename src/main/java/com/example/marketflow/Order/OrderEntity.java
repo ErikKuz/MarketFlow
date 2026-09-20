@@ -107,9 +107,12 @@ public class OrderEntity {
                     || next == OrderStatus.CANCELLED;
             case CONFIRMED -> next == OrderStatus.SELLERSSTARTWORK
                     || next == OrderStatus.CANCELLED;
-            case SELLERSSTARTWORK -> next == OrderStatus.SELLERSENDWORKANDSEND;
-            case SELLERSENDWORKANDSEND -> next == OrderStatus.COMPLETED;
-            case COMPLETED, CANCELLED -> false;
+            case SELLERSSTARTWORK -> next == OrderStatus.SELLERSENDWORKANDSEND
+                    || next == OrderStatus.CANCELLED;
+            case SELLERSENDWORKANDSEND -> next == OrderStatus.COMPLETED
+                    || next == OrderStatus.CANCELLED;
+            case COMPLETED -> next == OrderStatus.CANCELLED;
+            case CANCELLED -> false;
         };
     }
 

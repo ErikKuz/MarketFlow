@@ -32,6 +32,7 @@ import com.example.marketflow.User.*;
 import com.example.marketflow.cart.CartItemEntity;
 import com.example.marketflow.payment.*;
 import com.example.marketflow.payment_cards.PaymentCardEntity;
+import com.example.marketflow.messaging.command.MarketFlowCommand;
 import com.example.marketflow.products.ProductEntity;
 import com.example.marketflow.service.*;
 import com.example.marketflow.userRoles.*;
@@ -64,6 +65,7 @@ class MarketplacePostgresTest {
     @Autowired SellerOrderRepository parts;
     @Autowired OrderService orderService;
     @Autowired PaymentService payments;
+    @Autowired WalletService walletService;
     @Autowired OrderWorkflowService workflow;
     @Autowired AuthService auth;
     @Autowired JdbcTemplate jdbc;
@@ -87,9 +89,14 @@ class MarketplacePostgresTest {
                 wallets.findByType(WalletType.PLATFORM).orElseThrow().getPendingBalance()
         );
         deliver(f);
-        workflow.ConfirmThatUSERGETPRODUCTBySellerID(f.buyer, f.order, f.part);
-        assertEquals(OrderStatus.COMPLETED, orders.findById(f.order).orElseThrow().getStatus());
+        assertEquals(OrderStatus.SELLERSENDWORKANDSEND,
+                orders.findById(f.order).orElseThrow().getStatus());
         assertNotNull(orders.findById(f.order).orElseThrow().getDeliveredAt());
+        assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET,
+                parts.findById(f.part).orElseThrow().getSettlementStatus());
+        moneyEquals("90.00", wallets.findByUserId(f.seller).orElseThrow().getPendingBalance());
+        release(f.order, f.part);
+        assertEquals(OrderStatus.COMPLETED, orders.findById(f.order).orElseThrow().getStatus());
         moneyEquals("0.00", wallets.findByUserId(f.seller).orElseThrow().getPendingBalance());
         moneyEquals("90.00", wallets.findByUserId(f.seller).orElseThrow().getAvailableBalance());
         moneyEquals(platformPendingBefore.toPlainString(),
@@ -153,6 +160,9 @@ class MarketplacePostgresTest {
         ship(f.seller, first.getId());
         workflow.ConfirmThatUSERGETPRODUCTBySellerID(f.buyer, orderId, first.getId());
         assertEquals(OrderStatus.SELLERSSTARTWORK, orders.findById(orderId).orElseThrow().getStatus());
+        assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET,
+                parts.findById(first.getId()).orElseThrow().getSettlementStatus());
+        release(orderId, first.getId());
         assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET,
                 parts.findById(first.getId()).orElseThrow().getSettlementStatus());
         moneyEquals("0.00", wallets.findByUserId(f.seller).orElseThrow().getPendingBalance());
@@ -160,6 +170,11 @@ class MarketplacePostgresTest {
         ship(seller2, second.getId());
         assertEquals(OrderStatus.SELLERSENDWORKANDSEND, orders.findById(orderId).orElseThrow().getStatus());
         workflow.ConfirmThatUSERGETPRODUCTBySellerID(f.buyer, orderId, second.getId());
+        assertEquals(OrderStatus.SELLERSENDWORKANDSEND,
+                orders.findById(orderId).orElseThrow().getStatus());
+        assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET,
+                parts.findById(second.getId()).orElseThrow().getSettlementStatus());
+        release(orderId, second.getId());
         assertEquals(OrderStatus.COMPLETED, orders.findById(orderId).orElseThrow().getStatus());
         assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET,
                 parts.findById(second.getId()).orElseThrow().getSettlementStatus());
@@ -185,15 +200,34 @@ class MarketplacePostgresTest {
         mvc.perform(post("/api/v1/wallet/withdraw")
                         .with(user(principal(f.seller))).with(csrf())
                         .contentType("application/json").content(withdrawalJson))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isAccepted())
+                .andExpect(header().exists("Location"))
+                .andExpect(jsonPath("$.status").value("PENDING"));
         mvc.perform(post("/api/v1/wallet/withdraw")
                         .with(user(principal(f.seller))).with(csrf())
                         .contentType("application/json").content(withdrawalJson))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isAccepted());
+        PaymentTransactionEntity withdrawal = transactions
+                .findByIdempotencyKey("withdraw-rest-" + orderId).orElseThrow();
+        assertEquals(TransactionStatus.PENDING, withdrawal.getStatus());
         moneyEquals("50.00", wallets.findByUserId(f.seller).orElseThrow().getAvailableBalance());
+        moneyEquals("40.00", wallets.findByUserId(f.seller).orElseThrow().getReservedBalance());
+        moneyEquals("0.00", cards.findById(f.sellerCard).orElseThrow().getBalance());
+        mvc.perform(get("/api/v1/wallet/withdrawals/{id}", withdrawal.getId())
+                        .with(user(principal(f.seller))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.transactionId").value(withdrawal.getId()))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+        walletService.processWithdrawal(MarketFlowCommand.withdrawal(
+                withdrawal.getId(), f.seller, f.sellerCard, money("40.00"), Instant.now()
+        ));
+        moneyEquals("50.00", wallets.findByUserId(f.seller).orElseThrow().getAvailableBalance());
+        moneyEquals("0.00", wallets.findByUserId(f.seller).orElseThrow().getReservedBalance());
         moneyEquals("40.00", cards.findById(f.sellerCard).orElseThrow().getBalance());
         assertEquals(TransactionType.SELLER_TRANSFERMONEYFROMMAINWALLET,
                 transactions.findByIdempotencyKey("withdraw-rest-" + orderId).orElseThrow().getType());
+        assertEquals(TransactionStatus.COMPLETED,
+                transactions.findByIdempotencyKey("withdraw-rest-" + orderId).orElseThrow().getStatus());
     }
 
     @Test
@@ -237,6 +271,39 @@ class MarketplacePostgresTest {
         assertThrows(com.example.marketflow.exception.InvalidOrderStateException.class,
                 () -> workflow.sellerTransition(
                         f.seller, f.part, OBSERFFORSENDBYSELLERPRODUCTSTATUS.SELLERSENDPRODUCT));
+    }
+
+    @Test
+    void paidOrderCanBeRefundedAfterReceiptWhileMoneyIsStillPending() {
+        var f = orderFixture();
+        BigDecimal platformPendingBefore = wallets.findByType(WalletType.PLATFORM)
+                .orElseThrow().getPendingBalance();
+        pay(f);
+        deliver(f);
+
+        assertEquals(OrderStatus.SELLERSENDWORKANDSEND,
+                orders.findById(f.order).orElseThrow().getStatus());
+        assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET,
+                parts.findById(f.part).orElseThrow().getSettlementStatus());
+
+        orderService.cancelOrder(f.order, f.buyer);
+
+        moneyEquals("1000.00", cards.findById(f.buyerCard).orElseThrow().getBalance());
+        moneyEquals("0.00", wallets.findByUserId(f.seller).orElseThrow().getPendingBalance());
+        moneyEquals(platformPendingBefore.toPlainString(),
+                wallets.findByType(WalletType.PLATFORM).orElseThrow().getPendingBalance());
+        assertEquals(5, products.findById(f.product).orElseThrow().getQuantity());
+        assertEquals(PaymentStatus.REFUNDED,
+                orders.findById(f.order).orElseThrow().getPaymentStatus());
+        assertEquals(OrderStatus.CANCELLED, orders.findById(f.order).orElseThrow().getStatus());
+        assertEquals(OBSERFFORSENDBYSELLERPRODUCTSTATUS.RETURNED,
+                parts.findById(f.part).orElseThrow().getStatus());
+        assertEquals(OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.RETURNMONEY,
+                parts.findById(f.part).orElseThrow().getSettlementStatus());
+
+        // Уже опубликованная команда освобождения денег становится безопасным no-op.
+        release(f.order, f.part);
+        moneyEquals("0.00", wallets.findByUserId(f.seller).orElseThrow().getAvailableBalance());
     }
 
     @Test
@@ -394,6 +461,16 @@ class MarketplacePostgresTest {
     private void ship(long seller, long part) {
         workflow.sellerTransition(seller, part, OBSERFFORSENDBYSELLERPRODUCTSTATUS.PROCESSING);
         workflow.sellerTransition(seller, part, OBSERFFORSENDBYSELLERPRODUCTSTATUS.SELLERSENDPRODUCT);
+    }
+    private void release(long orderId, long partId) {
+        SellerOrderEntity part = parts.findById(partId).orElseThrow();
+        workflow.releaseSellerFunds(MarketFlowCommand.releaseSellerFunds(
+                orderId,
+                partId,
+                part.getSellerId(),
+                part.getSellerAmount(),
+                Instant.now()
+        ));
     }
     private static BigDecimal money(String v) { return new BigDecimal(v); }
     private static void moneyEquals(String expected, BigDecimal actual) { assertEquals(0, money(expected).compareTo(actual)); }

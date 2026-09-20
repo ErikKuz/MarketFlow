@@ -14,8 +14,8 @@ class MigrationPostgresTest {
     @Test
     void freshDatabaseAppliesAllMigrationsAndSecondRunIsNoOp() throws Exception {
         var schema = PostgresTestSupport.schema("migration_fresh_");
-        var flyway = flyway(schema, "17");
-        assertEquals(17, flyway.migrate().migrationsExecuted);
+        var flyway = flyway(schema, "18");
+        assertEquals(18, flyway.migrate().migrationsExecuted);
         flyway.validate();
         assertEquals(0, flyway.migrate().migrationsExecuted);
         try (var c = connection(schema); var sql = c.createStatement(); var result = sql.executeQuery("""
@@ -56,29 +56,31 @@ class MigrationPostgresTest {
                     """);
         }
 
-        var upgrade = flyway(schema, "17");
-        assertEquals(5, upgrade.migrate().migrationsExecuted);
+        var upgrade = flyway(schema, "18");
+        assertEquals(6, upgrade.migrate().migrationsExecuted);
         upgrade.validate();
 
         try (var c = connection(schema); var sql = c.createStatement()) {
             try (var result = sql.executeQuery("""
-                    SELECT pending_balance, available_balance
+                    SELECT pending_balance, available_balance, reserved_balance
                     FROM wallet_accounts
                     WHERE user_id = 2 AND type = 'SELLER'
                     """)) {
                 assertTrue(result.next());
                 assertEquals(90, result.getBigDecimal(1).intValueExact());
                 assertEquals(0, result.getBigDecimal(2).intValueExact());
+                assertEquals(0, result.getBigDecimal(3).intValueExact());
             }
 
             try (var result = sql.executeQuery("""
-                    SELECT pending_balance, available_balance
+                    SELECT pending_balance, available_balance, reserved_balance
                     FROM wallet_accounts
                     WHERE type = 'PLATFORM'
                     """)) {
                 assertTrue(result.next());
                 assertEquals(10, result.getBigDecimal(1).intValueExact());
                 assertEquals(0, result.getBigDecimal(2).intValueExact());
+                assertEquals(0, result.getBigDecimal(3).intValueExact());
             }
 
             try (var result = sql.executeQuery("""
@@ -120,6 +122,12 @@ class MigrationPostgresTest {
                     FROM payment_transactions
                     WHERE idempotency_key = 'v14-payment'
                     """);
+
+            assertThrows(java.sql.SQLException.class, () -> sql.executeUpdate("""
+                    UPDATE wallet_accounts
+                    SET reserved_balance = -1
+                    WHERE user_id = 2 AND type = 'SELLER'
+                    """));
         }
     }
 

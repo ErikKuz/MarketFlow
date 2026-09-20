@@ -29,9 +29,8 @@ public class OutboxEventEntity {
     @Column(name = "event_id", nullable = false, unique = true)
     private UUID eventId;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "event_type", nullable = false, length = 60)
-    private MarketFlowEventType eventType;
+    private String eventType;
 
     @Column(name = "routing_key", nullable = false, length = 100)
     private String routingKey;
@@ -64,6 +63,17 @@ public class OutboxEventEntity {
     public OutboxEventEntity(
             UUID eventId,
             MarketFlowEventType eventType,
+            String routingKey,
+            Long aggregateId,
+            String payload,
+            Instant now
+    ) {
+        this(eventId, eventType.name(), routingKey, aggregateId, payload, now);
+    }
+
+    public OutboxEventEntity(
+            UUID eventId,
+            String eventType,
             String routingKey,
             Long aggregateId,
             String payload,
