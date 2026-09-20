@@ -51,6 +51,8 @@ public class BuyerNotificationListener {
     }
 
     private String message(String title, MarketFlowEvent event) {
-        return event.orderId() == null ? title : title + ". Заказ №" + event.orderId();
+        String order = event.orderId() == null ? "" : ". Заказ №" + event.orderId();
+        String part = event.sellerOrderId() == null ? "" : ", часть заказа №" + event.sellerOrderId();
+        return title + order + part;
     }
 }

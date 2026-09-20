@@ -34,4 +34,21 @@ class BuyerNotificationListenerTest {
         assertEquals("BUYER", captor.getValue().getRecipientType());
         assertEquals("Заказ оплачен", captor.getValue().getTitle());
     }
+
+    @Test
+    void identifiesSellerOrderPartInShipmentNotification() {
+        NotificationRepository repository = org.mockito.Mockito.mock(NotificationRepository.class);
+        Instant now = Instant.parse("2026-01-01T00:00:00Z");
+        var listener = new BuyerNotificationListener(repository, Clock.fixed(now, ZoneOffset.UTC));
+        MarketFlowEvent event = MarketFlowEvent.create(
+                MarketFlowEventType.SELLER_SENT_PRODUCT,
+                42L, 51L, 7L, 9L, null, "PROCESSING", "SELLERSENDPRODUCT", now
+        );
+
+        listener.handle(event);
+
+        ArgumentCaptor<NotificationEntity> captor = ArgumentCaptor.forClass(NotificationEntity.class);
+        verify(repository).save(captor.capture());
+        assertEquals("Продавец отправил товар. Заказ №42, часть заказа №51", captor.getValue().getMessage());
+    }
 }

@@ -1,6 +1,7 @@
 package com.example.marketflow.messaging.listener;
 
 import java.time.Clock;
+import java.math.BigDecimal;
 import java.util.List;
 
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -51,7 +52,7 @@ public class SellerNotificationListener {
                     event.eventId(), sellerId, "SELLER")) {
                 notificationRepository.save(new NotificationEntity(
                         event.eventId(), sellerId, "SELLER", title,
-                        message(title, event), clock.instant()
+                        message(title, event, sellerId), clock.instant()
                 ));
             }
         }
@@ -70,9 +71,30 @@ public class SellerNotificationListener {
                 .toList();
     }
 
-    private String message(String title, MarketFlowEvent event) {
+    private String message(String title, MarketFlowEvent event, Long sellerId) {
         String order = event.orderId() == null ? "" : ". Заказ №" + event.orderId();
-        String amount = event.amount() == null ? "" : ", сумма " + event.amount();
-        return title + order + amount;
+        String part = event.sellerOrderId() == null ? "" : ", часть заказа №" + event.sellerOrderId();
+        BigDecimal notificationAmount = event.amount();
+
+        if (event.eventType() == com.example.marketflow.messaging.MarketFlowEventType.ORDER_PAID
+                && event.orderId() != null) {
+            var sellerPart = sellerOrderRepository.findAllByOrderIdOrderBySellerId(event.orderId()).stream()
+                    .filter(value -> value.getSellerId().equals(sellerId))
+                    .findFirst();
+            if (sellerPart.isPresent()) {
+                part = ", ваша часть №" + sellerPart.get().getId();
+                notificationAmount = sellerPart.get().getTotalAmount();
+            }
+        }
+
+        boolean showAmount = switch (event.eventType()) {
+            case ORDER_PAID, SELLER_MONEY_PENDING, SELLER_MONEY_AVAILABLE,
+                    SELLER_WITHDRAWAL_COMPLETED, SELLER_MONEY_RETURNED -> true;
+            default -> false;
+        };
+        String amount = showAmount && notificationAmount != null
+                ? ", сумма " + notificationAmount
+                : "";
+        return title + order + part + amount;
     }
 }
