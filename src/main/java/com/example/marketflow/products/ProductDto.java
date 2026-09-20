@@ -1,5 +1,6 @@
 package com.example.marketflow.products;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 
 public record ProductDto(
@@ -9,5 +10,5 @@ public record ProductDto(
         BigDecimal price,
         Integer quantity,
         String imageUrl
-) {
+) implements Serializable {
 }

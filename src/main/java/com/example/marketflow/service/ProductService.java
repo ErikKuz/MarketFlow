@@ -2,6 +2,7 @@ package com.example.marketflow.service;
 
 import java.util.List;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +21,7 @@ public class ProductService {
     private final ProductRepository rep;
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "catalogProducts", key = "'available'")
     public List<ProductDto> getAvailableProducts() {
         return rep.findAllByActiveTrueAndQuantityGreaterThan(0)
                 .stream()
@@ -28,6 +30,7 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "catalogProduct", key = "#id")
     public ProductDto getProductById(Long id) {
         ProductEntity product = rep.findById(id)
                 .orElseThrow(() -> new ProductNotFoundException(id));

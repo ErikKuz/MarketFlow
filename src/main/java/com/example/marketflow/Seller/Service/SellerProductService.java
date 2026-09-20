@@ -1,5 +1,6 @@
 package com.example.marketflow.Seller.Service;
 
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,7 @@ public class SellerProductService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = {"catalogProducts", "catalogProduct"}, allEntries = true)
     public Long createProduct(CreateProductRequest request, Long sellerId){
         
         requireSeller(sellerId);
@@ -44,6 +46,7 @@ public class SellerProductService {
     
 
     @Transactional
+    @CacheEvict(cacheNames = {"catalogProducts", "catalogProduct"}, allEntries = true)
     public void updateProduct(Long productId,Long SellerId,UpdateProductRequest dto){
 
         requireSeller(SellerId);
@@ -56,6 +59,7 @@ public class SellerProductService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = {"catalogProducts", "catalogProduct"}, allEntries = true)
     public void DisableProduct(Long ProductId,Long SellerId){
 
         requireSeller(SellerId);
@@ -66,6 +70,7 @@ public class SellerProductService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = {"catalogProducts", "catalogProduct"}, allEntries = true)
     public void EnableProduct(Long ProductId,Long SellerId){
         
         requireSeller(SellerId);
@@ -80,6 +85,7 @@ public class SellerProductService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = {"catalogProducts", "catalogProduct"}, allEntries = true)
     public void RestokeQuanityProduct(Long productId,Long SellerId,Integer amount){
 
         requireSeller(SellerId);
