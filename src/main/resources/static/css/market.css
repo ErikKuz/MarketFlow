@@ -53,23 +53,43 @@ a {
 .market-nav {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 6px;
 }
 
-.market-nav a {
+.market-nav a,
+.market-nav button {
     min-height: 40px;
     padding: 10px 13px;
     border-radius: 5px;
+    border: 0;
     color: #48564f;
+    background: transparent;
     font-size: 14px;
     font-weight: 700;
     text-decoration: none;
+    cursor: pointer;
 }
 
 .market-nav a:hover,
-.market-nav a[aria-current="page"] {
+.market-nav a[aria-current="page"],
+.market-nav button:hover {
     color: #0f5b39;
     background: #e8f3ec;
+}
+
+.market-nav form {
+    margin: 0;
+}
+
+.success-message {
+    margin: 0 0 24px;
+    padding: 14px 16px;
+    border: 1px solid #a9d4b7;
+    border-radius: 8px;
+    color: #174d2c;
+    background: #edf8f0;
 }
 
 .market-main {
@@ -1107,10 +1127,13 @@ a {
 
     .market-nav {
         width: 100%;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
         overflow-x: auto;
     }
 
-    .market-nav a {
+    .market-nav a,
+    .market-nav form {
         flex: 0 0 auto;
     }
 

@@ -2,7 +2,8 @@
 <html lang="ru" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{workspace/fragments :: head('Уведомления')}"></head>
 <body>
-<nav th:replace="~{workspace/fragments :: buyerNav}"></nav>
+<th:block th:if="${isSeller}"><nav th:replace="~{workspace/fragments :: sellerNav}"></nav></th:block>
+<th:block th:unless="${isSeller}"><nav th:replace="~{workspace/fragments :: buyerNav}"></nav></th:block>
 <main class="workspace">
     <h1>Уведомления</h1>
 
@@ -17,7 +18,8 @@
                           th:text="${notification.read} ? 'Прочитано' : 'Новое'">Новое</span>
                 </div>
                 <p th:text="${notification.message}">Текст уведомления</p>
-                <time class="muted" th:text="${notification.createdAt}">Время события</time>
+                <time class="muted" th:datetime="${notification.createdAt}"
+                      th:text="${@uiLabels.dateTime(notification.createdAt)}">Время события</time>
             </div>
             <form th:if="${!notification.read}"
                   th:action="@{/notifications/{id}/read(id=${notification.id},page=${notifications.page})}"

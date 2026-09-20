@@ -4,12 +4,16 @@
 <body><nav th:replace="~{workspace/fragments :: sellerNav}"></nav>
 <main class="workspace"><h1>Обработка заказа</h1>
 <div class="panel"><h2 th:text="${'Часть #' + details.fulfillment.id + ' заказа #' + details.fulfillment.orderId}"></h2>
-<p>Статус: <b th:text="${details.fulfillment.status}"></b> · Оплата: <span th:text="${details.paymentStatus}"></span></p>
+<p>Статус: <b th:text="${@uiLabels.fulfillmentStatus(details.fulfillment.status)}"></b>
+· Оплата: <span th:text="${@uiLabels.paymentStatus(details.paymentStatus)}"></span>
+· Расчёт: <span th:text="${@uiLabels.settlementStatus(details.fulfillment.settlementStatus)}"></span></p>
 <form th:if="${details.paymentStatus.name() == 'PAID' and details.fulfillment.status.name() == 'NEW'}"
 th:action="@{/workspace/seller/orders/{id}/process(id=${details.fulfillment.id})}" method="post"><button>Начать сборку</button></form>
 <form th:if="${details.fulfillment.status.name() == 'PROCESSING'}"
 th:action="@{/workspace/seller/orders/{id}/ship(id=${details.fulfillment.id})}" method="post"><button>Передать в доставку</button></form>
-<p th:if="${details.fulfillment.status.name() == 'SELLERSENDPRODUCT'}" class="muted">Ожидается подтверждение получения покупателем.</p></div>
+<p th:if="${details.fulfillment.status.name() == 'SELLERSENDPRODUCT'}" class="muted">Ожидается подтверждение получения покупателем.</p>
+<p th:if="${details.fulfillment.status.name() == 'USERGETPRODUCT' and details.fulfillment.settlementStatus.name() == 'PENDINGWALLET'}" class="muted">Покупатель подтвердил получение. Деньги обрабатываются.</p>
+<p th:if="${details.fulfillment.settlementStatus.name() == 'MAINWALLET'}" class="muted">Деньги доступны в основном балансе продавца.</p></div>
 <div class="table-scroll"><table><thead><tr><th>Товар</th><th>Цена при покупке</th><th>Количество</th><th>Сумма</th></tr></thead><tbody>
 <tr th:each="i : ${details.items}"><td th:text="${i.productName}"></td><td th:text="${i.unitPrice}"></td><td th:text="${i.quantity}"></td><td th:text="${i.totalPrice}"></td></tr></tbody></table></div>
 </main></body></html>

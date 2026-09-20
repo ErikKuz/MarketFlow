@@ -5,17 +5,48 @@
 <script th:src="@{/js/notifications.js}" defer></script></head>
 <body>
 <nav th:fragment="buyerNav" class="nav"><a th:href="@{/Buyer/account}" class="brand">MarketFlow</a><a th:href="@{/account/catalog}">Каталог</a>
+<a th:href="@{/account/cart}">Корзина</a>
 <a th:href="@{/account/orders}">Мои заказы</a>
+<a th:href="@{/account/account/cards}">Карты</a>
 <a class="notification-link" th:href="@{/notifications}">🔔 Уведомления <span class="notification-count" data-unread-count hidden>0</span></a>
 <a th:if="${isSeller}" th:href="@{/seller/account}">Кабинет продавца</a>
-<a th:href="@{/Buyer/account}">Личный кабинет</a></nav>
+<a th:href="@{/Buyer/account}">Личный кабинет</a>
+<form th:action="@{/logout}" method="post"><button type="submit">Выйти</button></form></nav>
 <nav th:fragment="sellerNav" class="nav"><a th:href="@{/seller/account}" class="brand">MarketFlow Seller</a>
 <a th:href="@{/workspace/seller/orders}">Заказы</a>
 <a th:href="@{/seller/account}">Мои товары</a>
+<a th:href="@{/seller/products/new}">Добавить товар</a>
 <a th:href="@{/seller/wallet}">Кошелёк</a>
 <a class="notification-link" th:href="@{/notifications}">🔔 Уведомления <span class="notification-count" data-unread-count hidden>0</span></a>
 <a th:href="@{/account/catalog}">Режим покупателя</a>
 <form th:action="@{/logout}" method="post"><button type="submit">Выйти</button></form></nav>
+<header th:fragment="buyerMarketHeader(active)" class="market-header">
+<a class="market-brand" th:href="@{/account/catalog}">MarketFlow</a>
+<nav class="market-nav" aria-label="Основная навигация">
+<a th:href="@{/account/catalog}" th:attr="aria-current=${active == 'catalog' ? 'page' : null}">Каталог</a>
+<a th:href="@{/account/cart}" th:attr="aria-current=${active == 'cart' ? 'page' : null}">Корзина</a>
+<a th:href="@{/account/orders}" th:attr="aria-current=${active == 'orders' ? 'page' : null}">Мои заказы</a>
+<a th:href="@{/account/account/cards}" th:attr="aria-current=${active == 'cards' ? 'page' : null}">Карты</a>
+<a class="notification-link" th:href="@{/notifications}">🔔 Уведомления <span class="notification-count" data-unread-count hidden>0</span></a>
+<a th:if="${isSeller}" th:href="@{/seller/account}">Кабинет продавца</a>
+<a th:href="@{/Buyer/account}" th:attr="aria-current=${active == 'profile' ? 'page' : null}">Профиль</a>
+<form th:action="@{/logout}" method="post"><button type="submit">Выйти</button></form>
+</nav>
+<script th:src="@{/js/notifications.js}" defer></script>
+</header>
+<header th:fragment="sellerMarketHeader(active)" class="market-header">
+<a class="market-brand" th:href="@{/seller/account}">MarketFlow Seller</a>
+<nav class="market-nav" aria-label="Навигация продавца">
+<a th:href="@{/workspace/seller/orders}" th:attr="aria-current=${active == 'orders' ? 'page' : null}">Заказы</a>
+<a th:href="@{/seller/account}" th:attr="aria-current=${active == 'products' ? 'page' : null}">Мои товары</a>
+<a th:href="@{/seller/products/new}" th:attr="aria-current=${active == 'new-product' ? 'page' : null}">Добавить товар</a>
+<a th:href="@{/seller/wallet}" th:attr="aria-current=${active == 'wallet' ? 'page' : null}">Кошелёк</a>
+<a class="notification-link" th:href="@{/notifications}">🔔 Уведомления <span class="notification-count" data-unread-count hidden>0</span></a>
+<a th:href="@{/account/catalog}">Режим покупателя</a>
+<form th:action="@{/logout}" method="post"><button type="submit">Выйти</button></form>
+</nav>
+<script th:src="@{/js/notifications.js}" defer></script>
+</header>
 <div th:fragment="pager(page, base)" class="pager">
 <a th:if="${page.page > 0}" th:href="@{${base}(page=${page.page - 1})}">← Предыдущая</a>
 <span th:text="${'Страница ' + (page.page + 1) + ' · Всего записей: ' + page.totalElements}"></span>

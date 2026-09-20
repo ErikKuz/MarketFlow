@@ -4,7 +4,7 @@
 <body><nav th:replace="~{workspace/fragments :: buyerNav}"></nav>
 <main class="workspace"><h1>Мои заказы</h1>
 <div class="table-scroll"><table><thead><tr><th>Заказ</th><th>Создан</th><th>Статус</th><th>Оплата</th><th>Сумма</th><th></th></tr></thead>
-<tbody><tr th:each="o : ${orders.content}"><td th:text="${'#' + o.id}"></td><td th:text="${o.createdAt}"></td><td th:text="${o.status}"></td><td th:text="${o.paymentStatus}"></td>
-<td th:text="${o.totalPrice + ' ₽'}"></td><td><a th:href="@{/account/orders/{id}(id=${o.id})}">Детали и оплата</a><br><a th:href="@{/account/orders/{id}/workflow(id=${o.id})}">Доставка</a></td></tr>
+<tbody><tr th:each="o : ${orders.content}"><td th:text="${'#' + o.id}"></td><td th:text="${@uiLabels.dateTime(o.createdAt)}"></td><td th:text="${@uiLabels.orderStatus(o.status)}"></td><td th:text="${@uiLabels.paymentStatus(o.paymentStatus)}"></td>
+<td th:text="${o.totalPrice + ' ₽'}"></td><td><a th:href="@{/account/orders/{id}(id=${o.id})}">Детали и оплата</a><br><a th:if="${o.paymentStatus.name() == 'PAID'}" th:href="@{/account/orders/{id}/workflow(id=${o.id})}">Доставка</a></td></tr>
 <tr th:if="${orders.content.isEmpty()}"><td colspan="6">Вы ещё не создавали заказы.</td></tr></tbody></table></div>
 <div th:replace="~{workspace/fragments :: pager(${orders}, '/account/orders')}"></div></main></body></html>

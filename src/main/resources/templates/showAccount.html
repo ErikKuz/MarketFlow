@@ -5,15 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Профиль | MarketFlow</title>
     <link rel="stylesheet" th:href="@{/css/auth.css}" href="/css/auth.css">
-    <script th:src="@{/js/notifications.js}" src="/js/notifications.js" defer></script>
+    <link rel="stylesheet" th:href="@{/css/market.css}" href="/css/market.css">
 </head>
 <body>
+    <header th:replace="~{workspace/fragments :: buyerMarketHeader('profile')}"></header>
     <main class="page-shell">
-        <header class="topbar">
-            <a class="brand brand-dark" th:href="@{/}" href="/">MarketFlow</a>
-            <a class="back-link" th:href="@{/account/catalog}" href="/account/catalog">← Вернуться в каталог</a>
-        </header>
-
         <section class="profile-section" aria-labelledby="profile-title">
             <div>
                 <p class="eyebrow">Личный кабинет</p>
@@ -32,7 +28,7 @@
                 </div>
                 <div>
                     <dt>Статус</dt>
-                    <dd th:text="${status}">ACTIVE</dd>
+                    <dd th:text="${@uiLabels.userStatus(status)}">Активен</dd>
                 </div>
             </dl>
 
@@ -53,11 +49,6 @@
                 <a class="button button-secondary" th:href="@{/account/account/cards}" href="/account/account/cards">
                     Управление картами
                 </a>
-                <form th:action="@{/logout}" action="/logout" method="post">
-                    <button class="button button-secondary profile-exit" type="submit">
-                    Выйти на главную
-                    </button>
-                </form>
             </div>
         </section>
     </main>

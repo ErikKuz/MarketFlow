@@ -7,16 +7,7 @@
     <link rel="stylesheet" th:href="@{/css/market.css}" href="/css/market.css">
 </head>
 <body>
-<header class="market-header">
-    <a class="market-brand" th:href="@{/account/catalog}" href="/account/catalog">MarketFlow</a>
-    <nav class="market-nav" aria-label="Основная навигация">
-        <a th:href="@{/account/catalog}" href="/account/catalog" aria-current="page">Каталог</a>
-        <a th:href="@{/account/cart}" href="/account/cart">Корзина</a>
-        <a th:href="@{/account/account/cards}" href="/account/account/cards">Карты</a>
-        <a th:if="${isSeller}" th:href="@{/seller/account}" href="/seller/account">Кабинет продавца</a>
-        <a th:href="@{/Buyer/account}" href="/Buyer/account">Профиль</a>
-    </nav>
-</header>
+<header th:replace="~{workspace/fragments :: buyerMarketHeader('catalog')}"></header>
 
 <main class="market-main">
     <div class="page-heading">

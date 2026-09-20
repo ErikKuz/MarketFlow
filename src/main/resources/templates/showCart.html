@@ -7,16 +7,7 @@
     <link rel="stylesheet" th:href="@{/css/market.css}" href="/css/market.css">
 </head>
 <body>
-<header class="market-header">
-    <a class="market-brand" th:href="@{/account/catalog}" href="/account/catalog">MarketFlow</a>
-    <nav class="market-nav" aria-label="Основная навигация">
-        <a th:href="@{/account/catalog}" href="/account/catalog">Каталог</a>
-        <a th:href="@{/account/cart}" href="/account/cart" aria-current="page">Корзина</a>
-        <a th:href="@{/account/account/cards}" href="/account/account/cards">Карты</a>
-        <a th:if="${isSeller}" th:href="@{/seller/account}" href="/seller/account">Кабинет продавца</a>
-        <a th:href="@{/Buyer/account}" href="/Buyer/account">Профиль</a>
-    </nav>
-</header>
+<header th:replace="~{workspace/fragments :: buyerMarketHeader('cart')}"></header>
 
 <main class="market-main">
     <div class="page-heading">
@@ -54,7 +45,8 @@
             </div>
             <div class="card-actions">
                 <form th:action="@{/account/cart/items/{id}/quantity(id=${item.id})}" method="post">
-                    <input type="number" name="quantity" min="1" th:value="${item.quantity}" required>
+                    <input type="number" name="quantity" min="1" th:value="${item.quantity}"
+                           th:attr="aria-label=${'Количество товара ' + item.productName}" required>
                     <button class="button button-secondary" type="submit">Изменить количество</button>
                 </form>
                 <form th:action="@{/account/cart/items/{id}/select(id=${item.id})}" method="post">

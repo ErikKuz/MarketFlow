@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.mock.web.MockHttpSession;
@@ -28,6 +29,7 @@ import com.example.marketflow.service.NotificationService.NotificationView;
 
 @WebMvcTest(NotificationController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@Import(UiLabels.class)
 class NotificationControllerTest {
 
     @Autowired

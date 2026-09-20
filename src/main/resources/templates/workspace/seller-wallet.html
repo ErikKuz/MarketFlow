@@ -67,11 +67,11 @@
                 <thead><tr><th>Операция</th><th>Заказ</th><th>Сумма</th><th>Статус</th><th>Создана</th></tr></thead>
                 <tbody>
                 <tr th:each="transaction : ${transactions.content}">
-                    <td th:text="${transaction.type}">SELLER_PENDINGWALLET</td>
+                    <td th:text="${@uiLabels.transactionType(transaction.type)}">Начисление в ожидающий баланс</td>
                     <td th:text="${transaction.orderId == null ? '—' : '#' + transaction.orderId}">—</td>
                     <td th:text="${transaction.amount + ' ₽'}">0.00 ₽</td>
-                    <td><span class="badge" th:text="${transaction.status}">PENDING</span></td>
-                    <td th:text="${transaction.createdAt}">2026-01-01T00:00:00Z</td>
+                    <td><span class="badge" th:text="${@uiLabels.transactionStatus(transaction.status)}">В обработке</span></td>
+                    <td th:text="${@uiLabels.dateTime(transaction.createdAt)}">01.01.2026 04:00</td>
                 </tr>
                 <tr th:if="${transactions.content.isEmpty()}"><td colspan="5">Операций пока нет.</td></tr>
                 </tbody>

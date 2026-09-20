@@ -4,10 +4,11 @@
 <body><nav th:replace="~{workspace/fragments :: buyerNav}"></nav>
 <main class="workspace"><h1>Доставка заказа</h1>
 <p><a th:href="@{/account/orders/{id}(id=${order.id})}">← Состав заказа и оплата</a></p>
-<div class="panel"><h2 th:text="${'Заказ #' + order.id}"></h2><p><span th:text="${order.status}"></span> · Оплата: <span th:text="${order.paymentStatus}"></span> · <b th:text="${order.totalPrice + ' ₽'}"></b></p>
+<div class="panel"><h2 th:text="${'Заказ #' + order.id}"></h2><p><span th:text="${@uiLabels.orderStatus(order.status)}"></span> · Оплата: <span th:text="${@uiLabels.paymentStatus(order.paymentStatus)}"></span> · <b th:text="${order.totalPrice + ' ₽'}"></b></p>
 </div>
 <h2>Части заказа по продавцам</h2><div class="grid"><section class="card" th:each="p : ${parts}">
-<h3 th:text="${'Продавец #' + p.sellerId}"></h3><p th:text="${p.status}"></p><p th:text="${p.totalAmount + ' ₽'}"></p>
+<h3 th:text="${'Продавец #' + p.sellerId}"></h3><p th:text="${@uiLabels.fulfillmentStatus(p.status)}"></p><p th:text="${p.totalAmount + ' ₽'}"></p>
+<p class="muted" th:text="${'Расчёт: ' + @uiLabels.settlementStatus(p.settlementStatus)}"></p>
 <form th:if="${p.status.name() == 'SELLERSENDPRODUCT' and order.paymentStatus.name() == 'PAID'}" th:action="@{/account/orders/{id}/fulfillments/{partId}/receive(id=${order.id},partId=${p.id})}" method="post">
 <button type="submit">Подтвердить получение</button></form></section></div>
 </main></body></html>
