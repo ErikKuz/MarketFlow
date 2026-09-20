@@ -16,9 +16,11 @@ HTTP → Spring Security → MVC/REST Controller
      → Spring Data JPA / Hibernate
      → PostgreSQL + outbox_events
      → OutboxPublisher → RabbitMQ → history/notification consumers
+                                  → withdrawal/settlement consumers
 ```
 
 Flyway управляет схемой, OpenAPI описывает REST, Thymeleaf формирует HTML.
+Redis через Spring Cache временно хранит доступный каталог и карточки товаров с TTL 60 секунд. PostgreSQL остаётся источником истины, а изменения товара, оплата и возврат очищают кеш.
 
 ## Требования
 
@@ -80,6 +82,10 @@ Order: CREATED → CONFIRMED → SELLERSSTARTWORK → SELLERSENDWORKANDSEND → 
 - Transactional Outbox с publisher confirm, повторными попытками и статусами `NEW`, `PUBLISHED`, `FAILED`;
 - идемпотентные consumers истории и уведомлений;
 - REST API чтения и отметки уведомлений.
+- command exchange `marketflow.commands.exchange`;
+- отдельные очереди `marketflow.withdrawal.commands.queue` и `marketflow.settlement.commands.queue`;
+- асинхронный вывод с переходом транзакции `PENDING → COMPLETED/FAILED`;
+- асинхронное освобождение средств с существующим переходом `PENDINGWALLET → MAINWALLET`.
 
 ## Проверка готовности
 
@@ -89,4 +95,4 @@ Order: CREATED → CONFIRMED → SELLERSSTARTWORK → SELLERSENDWORKANDSEND → 
 - проверены параллельная оплата, последний остаток и заказ с двумя продавцами;
 - документация и OpenAPI соответствуют коду.
 
-RabbitMQ не участвует в расчёте денег и не влияет на атомарность основной транзакции: он получает только уже зафиксированные факты через Outbox.
+RabbitMQ не участвует в первоначальной оплате и расчёте комиссии. Через надёжно сохранённые Outbox-команды он запускает вывод и освобождение средств; каждое изменение денег consumer выполняет в отдельной транзакции PostgreSQL.

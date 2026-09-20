@@ -27,9 +27,9 @@ CREATED → CONFIRMED → SELLERSSTARTWORK → SELLERSENDWORKANDSEND → COMPLET
     └───────────────→ CANCELLED
 ```
 
-Payment is a learning simulation, not a banking integration. One database transaction verifies card ownership and balance, conditionally debits stock, updates the simulated card balance, accrues seller proceeds and platform commission to pending virtual balances, and records each money movement. Receipt releases pending funds to available balances. Pessimistic locks, atomic SQL and an idempotency key prevent double charges and overselling.
+Payment is a learning simulation, not a banking integration. One database transaction verifies card ownership and balance, conditionally debits stock, updates the simulated card balance, accrues seller proceeds and platform commission to pending virtual balances, and records each money movement. Receipt stores a RabbitMQ command, and a settlement consumer later releases pending funds to available balances. Pessimistic locks, atomic SQL and an idempotency key prevent double charges and overselling.
 
-Both MVC + Thymeleaf pages and REST endpoints are implemented. REST behavior is documented by OpenAPI contracts. Spring Security uses `JSESSIONID`, a server-side session, `BUYER` / `SELLER` roles and CSRF protection. Important order and virtual-money changes are persisted through a Transactional Outbox, published to RabbitMQ, and independently consumed into order history and user notifications.
+Both MVC + Thymeleaf pages and REST endpoints are implemented. REST behavior is documented by OpenAPI contracts. Spring Security uses `JSESSIONID`, a server-side session, `BUYER` / `SELLER` roles and CSRF protection. Important events and money commands are persisted through a Transactional Outbox. RabbitMQ delivers events to history and notifications, and commands to withdrawal and settlement consumers.
 
 ## Deliberately outside this MVP
 
@@ -37,7 +37,9 @@ Seller applications, moderation, analytics, returns after receipt and automatic 
 
 ## Stack
 
-Java 21, Spring Boot 4, Spring MVC, Thymeleaf, Spring Security, Spring Data JPA, Hibernate, PostgreSQL, Flyway, RabbitMQ, OpenAPI, Maven, JUnit 5, Mockito, MockMvc and Testcontainers.
+Java 21, Spring Boot 4, Spring MVC, Thymeleaf, Spring Security, Spring Data JPA, Hibernate, PostgreSQL, Flyway, RabbitMQ, Redis, OpenAPI, Maven, JUnit 5, Mockito, MockMvc and Testcontainers.
+
+Redis is used only as a temporary cache for the available catalogue and individual product views. PostgreSQL remains the source of truth. Entries expire after 60 seconds and both caches are cleared after a product change, successful payment or refund.
 
 ## Main tables
 
@@ -52,7 +54,7 @@ Java 21, Spring Boot 4, Spring MVC, Thymeleaf, Spring Security, Spring Data JPA,
 | `payment_cards` | Simulated cards and balances |
 | `wallet_accounts` | Pending and available virtual seller/platform balances |
 | `payment_transactions` | Payments, accruals, commission, releases, withdrawals and refunds |
-| `outbox_events` | Events waiting for confirmed RabbitMQ publication |
+| `outbox_events` | Events and commands waiting for confirmed RabbitMQ publication |
 | `order_event_history` | Asynchronous order and money event history |
 | `notifications` | Buyer and seller notifications |
 | `flyway_schema_history` | Applied migrations |
@@ -69,11 +71,11 @@ Run the standard test suite with `.\mvnw.cmd test`. Real PostgreSQL tests are en
 
 REST endpoints are under `/api/v1`; contracts are in [openapi](openapi).
 
-Seller withdrawal is available at `POST /api/v1/wallet/withdraw`.
+Seller withdrawal is available at `POST /api/v1/wallet/withdraw`. It returns `202 Accepted`, creates a `PENDING` transaction and a command, and the `marketflow.withdrawal.commands.queue` consumer performs the transfer.
+
+After receipt, `marketflow.settlement.commands.queue` releases pending seller and platform funds. Until it completes, the part is already `USERGETPRODUCT` while its settlement remains in the existing `PENDINGWALLET` status.
 
 Notifications are available at `GET /api/v1/notifications` and `POST /api/v1/notifications/{id}/read`. RabbitMQ Management is exposed at `http://localhost:15672`.
 
-## Next step
-
-RabbitMQ and the Transactional Outbox are implemented. Redis may follow later for catalogue caching when it provides measurable value.
+Redis connection variables are `REDIS_HOST`, `REDIS_PORT` and `REDIS_CATALOG_TTL`. Set `CACHE_TYPE=none` to disable caching. Orders, balances and stock remain stored in PostgreSQL independently of the cache.
 

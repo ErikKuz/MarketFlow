@@ -10,7 +10,7 @@
 бизнес-сервис
 → outbox_events в общей PostgreSQL-транзакции
 → OutboxPublisher
-→ marketflow.events.exchange
+→ marketflow.events.exchange или marketflow.commands.exchange
 → одна или несколько очередей
 → идемпотентный consumer
 → order_event_history / notifications
@@ -24,10 +24,12 @@
 marketflow.event-history.queue
 marketflow.buyer-notifications.queue
 marketflow.seller-notifications.queue
+marketflow.withdrawal.commands.queue
+marketflow.settlement.commands.queue
 marketflow.dead-letter.queue
 ```
 
-Topic exchange позволяет одному событию одновременно попасть, например, в историю и в уведомления. У каждого сообщения есть `eventId`; уникальные ограничения защищают consumers от повторной записи.
+Exchange событий позволяет одному факту одновременно попасть, например, в историю и в уведомления. Exchange команд направляет `WITHDRAWAL_REQUESTED` только обработчику вывода, а `RELEASE_SELLER_FUNDS` — только обработчику расчёта. У событий есть `eventId`; уникальные ограничения защищают consumers от повторной записи. Денежные consumers блокируют целевую запись и безопасно пропускают уже завершённую команду.
 
 ## Надёжность
 
@@ -44,7 +46,7 @@ Topic exchange позволяет одному событию одновреме
 1. Выполнить `docker compose up -d`.
 2. Открыть RabbitMQ Management: `http://localhost:15672`.
 3. Запустить приложение и пройти путь заказа.
-4. Проверить exchange, четыре очереди и строки `PUBLISHED` в `outbox_events`.
+4. Проверить два рабочих exchange, пять рабочих очередей, DLQ и строки `PUBLISHED` в `outbox_events`.
 5. Проверить `order_event_history` и `notifications`.
 
 Интеграционный тест `RabbitMqIntegrationTest` использует Testcontainers и автоматически пропускается, если Docker недоступен.

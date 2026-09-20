@@ -46,7 +46,7 @@ NEW → PROCESSING → SELLERSENDPRODUCT → USERGETPRODUCT
 
 ## 4. Получение
 
-Покупатель подтверждает получение каждой части. Для полученной части средства продавца и комиссия платформы переходят из `pendingBalance` в `availableBalance`, а в журнале сохраняется `SELLER_MAINWALLET`. После получения последней части:
+Покупатель подтверждает получение каждой части. В той же транзакции часть становится `USERGETPRODUCT`, а в `outbox_events` сохраняется команда `RELEASE_SELLER_FUNDS`. До обработки команды расчёт остаётся `PENDINGWALLET`. Consumer очереди `marketflow.settlement.commands.queue` блокирует часть заказа и кошельки, переводит средства продавца и комиссию платформы из `pendingBalance` в `availableBalance`, сохраняет `SELLER_MAINWALLET` и переводит расчёт в `MAINWALLET`. После получения последней части общий заказ становится:
 
 ```text
 OrderStatus.SELLERSENDWORKANDSEND → COMPLETED
@@ -60,7 +60,7 @@ OrderStatus.SELLERSENDWORKANDSEND → COMPLETED
 
 ## 6. Условный вывод
 
-Продавец выводит доступные виртуальные средства через `POST /api/v1/wallet/withdraw`. Операция уменьшает `availableBalance`, пополняет собственную тестовую карту и сохраняет `SELLER_TRANSFERMONEYFROMMAINWALLET`. Ключ идемпотентности защищает от повторного вывода.
+Продавец запрашивает вывод через `POST /api/v1/wallet/withdraw`. HTTP-запрос возвращает `202 Accepted`, сохраняет `SELLER_TRANSFERMONEYFROMMAINWALLET` со статусом `PENDING` и команду `WITHDRAWAL_REQUESTED`. Consumer очереди `marketflow.withdrawal.commands.queue` блокирует транзакцию, карту и кошелёк, уменьшает `availableBalance`, пополняет тестовую карту и переводит транзакцию в `COMPLETED`. Если на момент обработки средств уже недостаточно, транзакция становится `FAILED`. Ключ идемпотентности защищает от повторного вывода.
 
 ## 7. RabbitMQ и асинхронные обработчики
 
@@ -70,6 +70,8 @@ OrderStatus.SELLERSENDWORKANDSEND → COMPLETED
 marketflow.event-history.queue
 marketflow.buyer-notifications.queue
 marketflow.seller-notifications.queue
+marketflow.withdrawal.commands.queue
+marketflow.settlement.commands.queue
 ```
 
 История сохраняется в `order_event_history`, уведомления — в `notifications`. Повторная доставка безопасна благодаря уникальному `eventId`. После трёх неуспешных попыток consumer отклоняет сообщение, и RabbitMQ направляет его через `marketflow.dlx.exchange` в `marketflow.dead-letter.queue`.
@@ -82,4 +84,4 @@ MVC и REST используют Spring Security с серверной HTTP-се
 
 Заявки продавцов, заявки на возврат после получения, заявки на вывод с ручным одобрением, модерация, аналитика, аудит бизнес-событий и дедлайн оплаты не участвуют в MVP. V12 переносит существующие данные этих таблиц в схему `<основная_схема>_pre_mvp`.
 
-RabbitMQ не меняет атомарность оплаты: денежные операции остаются синхронными в PostgreSQL, а история и уведомления выполняются после фиксации транзакции. Redis не нужен для корректности этого пути и добавляется позднее при необходимости кеширования каталога.
+Оплата и начисление в `pendingBalance` остаются синхронными и атомарными в PostgreSQL. RabbitMQ асинхронно выполняет две последующие денежные операции: вывод продавца и освобождение средств после получения. Каждая команда сначала надёжно фиксируется в Outbox, а consumer выполняет своё изменение в отдельной транзакции PostgreSQL. Redis кеширует только чтение каталога; при оплате и возврате кеш очищается, а проверка и изменение остатка всегда выполняются в PostgreSQL.

@@ -15,16 +15,20 @@ Session + CSRF" as Security
   component "Transactional Services" as Services
   component "Spring Data JPA" as Repositories
   component "Transactional Outbox" as Outbox
+  component "Spring Cache" as Cache
   component "Outbox Publisher" as Publisher
   component "History Consumer" as History
   component "Buyer Notification Consumer" as BuyerNotifications
   component "Seller Notification Consumer" as SellerNotifications
+  component "Withdrawal Consumer" as WithdrawalConsumer
+  component "Settlement Consumer" as SettlementConsumer
   component "Thymeleaf" as Views
   component "Flyway" as Flyway
 }
 
 database "PostgreSQL" as PostgreSQL
-queue "RabbitMQ\nTopic Exchange + DLQ" as RabbitMQ
+queue "RabbitMQ\nEvents + Commands + DLQ" as RabbitMQ
+database "Redis\nProduct catalogue cache" as Redis
 
 Buyer --> Security
 Seller --> Security
@@ -33,6 +37,8 @@ Security --> Rest
 Mvc --> Services
 Rest --> Services
 Services --> Repositories
+Services --> Cache : catalogue reads / eviction
+Cache --> Redis
 Repositories --> PostgreSQL
 Services --> Outbox
 Outbox --> PostgreSQL
@@ -41,9 +47,13 @@ Publisher --> RabbitMQ : JSON + publisher confirm
 RabbitMQ --> History
 RabbitMQ --> BuyerNotifications
 RabbitMQ --> SellerNotifications
+RabbitMQ --> WithdrawalConsumer
+RabbitMQ --> SettlementConsumer
 History --> PostgreSQL
 BuyerNotifications --> PostgreSQL
 SellerNotifications --> PostgreSQL
+WithdrawalConsumer --> PostgreSQL
+SettlementConsumer --> PostgreSQL
 Mvc --> Views
 Flyway --> PostgreSQL : V1-V17
 @enduml

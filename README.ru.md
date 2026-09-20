@@ -27,9 +27,9 @@ CREATED → CONFIRMED → SELLERSSTARTWORK → SELLERSENDWORKANDSEND → COMPLET
     └───────────────→ CANCELLED
 ```
 
-Учебная оплата не связана с банком. Она атомарно проверяет владельца карты и баланс, списывает товарный остаток, уменьшает баланс тестовой карты, начисляет продавцам виртуальные средства за вычетом комиссии и начисляет комиссию платформе. До получения товара деньги находятся в `pendingBalance`, после получения переходят в `availableBalance`. Ключ идемпотентности и блокировки защищают от повторного списания и продажи последней единицы двум покупателям.
+Учебная оплата не связана с банком. Она атомарно проверяет владельца карты и баланс, списывает товарный остаток, уменьшает баланс тестовой карты, начисляет продавцам виртуальные средства за вычетом комиссии и начисляет комиссию платформе. До получения товара деньги находятся в `pendingBalance`. Подтверждение получения создаёт команду RabbitMQ, после которой отдельный consumer переводит деньги в `availableBalance`. Ключ идемпотентности и блокировки защищают от повторного списания и продажи последней единицы двум покупателям.
 
-Доступны MVC + Thymeleaf страницы и REST API по OpenAPI-контрактам. Spring Security использует `JSESSIONID`, серверную сессию, роли `BUYER` / `SELLER` и CSRF-защиту. Важные изменения заказа и виртуальных денег сохраняются через Transactional Outbox, публикуются в RabbitMQ и независимо попадают в историю заказа и уведомления.
+Доступны MVC + Thymeleaf страницы и REST API по OpenAPI-контрактам. Spring Security использует `JSESSIONID`, серверную сессию, роли `BUYER` / `SELLER` и CSRF-защиту. Важные события и денежные команды сохраняются через Transactional Outbox. RabbitMQ доставляет события в историю и уведомления, а команды — обработчикам вывода и освобождения средств.
 
 ## Что сознательно не входит в MVP
 
@@ -37,7 +37,9 @@ CREATED → CONFIRMED → SELLERSSTARTWORK → SELLERSENDWORKANDSEND → COMPLET
 
 ## Стек
 
-Java 21, Spring Boot 4, Spring MVC, Thymeleaf, Spring Security, Spring Data JPA, Hibernate, PostgreSQL, Flyway, RabbitMQ, OpenAPI, Maven, JUnit 5, Mockito, MockMvc и Testcontainers.
+Java 21, Spring Boot 4, Spring MVC, Thymeleaf, Spring Security, Spring Data JPA, Hibernate, PostgreSQL, Flyway, RabbitMQ, Redis, OpenAPI, Maven, JUnit 5, Mockito, MockMvc и Testcontainers.
+
+Redis используется только как временный кеш доступного каталога и карточек товаров. PostgreSQL остаётся единственным источником данных. Кеш живёт 60 секунд и полностью очищается после изменения товара, успешной оплаты или возврата.
 
 ## Основные таблицы
 
@@ -52,7 +54,7 @@ Java 21, Spring Boot 4, Spring MVC, Thymeleaf, Spring Security, Spring Data JPA,
 | `payment_cards` | Тестовые карты и условный баланс |
 | `wallet_accounts` | Ожидающие и доступные виртуальные балансы продавцов и платформы |
 | `payment_transactions` | Оплата, начисления, комиссия, освобождение средств, вывод и возврат |
-| `outbox_events` | События, ожидающие подтверждённой публикации в RabbitMQ |
+| `outbox_events` | События и команды, ожидающие подтверждённой публикации в RabbitMQ |
 | `order_event_history` | Асинхронная история событий заказов и денег |
 | `notifications` | Уведомления покупателей и продавцов |
 | `flyway_schema_history` | История миграций |
@@ -75,6 +77,10 @@ RABBITMQ_HOST=localhost
 RABBITMQ_PORT=5672
 RABBITMQ_USERNAME=guest
 RABBITMQ_PASSWORD=guest
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_CATALOG_TTL=60s
+CACHE_TYPE=redis
 ```
 
 Запуск Windows:
@@ -106,11 +112,11 @@ PostgreSQL-интеграционные тесты включаются пере
 
 REST API находится под `/api/v1`; контракты — в каталоге [openapi](openapi).
 
-Условный вывод доступных средств продавца: `POST /api/v1/wallet/withdraw`.
+Условный вывод доступных средств продавца: `POST /api/v1/wallet/withdraw`. Метод возвращает `202 Accepted`, создаёт транзакцию `PENDING` и команду; деньги переносит consumer очереди `marketflow.withdrawal.commands.queue`.
+
+Освобождение средств после получения выполняет consumer очереди `marketflow.settlement.commands.queue`. Пока команда не обработана, часть уже имеет статус `USERGETPRODUCT`, а её расчёт остаётся в существующем статусе `PENDINGWALLET`.
 
 Уведомления: `GET /api/v1/notifications` и `POST /api/v1/notifications/{id}/read`. RabbitMQ Management доступен по адресу `http://localhost:15672`.
 
-## Следующий этап
-
-RabbitMQ и Transactional Outbox уже внедрены. Следующим инфраструктурным этапом может быть Redis для кеширования каталога после появления измеримой пользы.
+Если Redis временно не нужен, кеш можно отключить настройкой `CACHE_TYPE=none`. Денежные операции, заказы и остатки продолжают храниться в PostgreSQL независимо от кеша.
 

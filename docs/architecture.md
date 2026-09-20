@@ -9,10 +9,13 @@ The synchronous business transaction and asynchronous event flow are:
 ```text
 HTTP -> Spring Security -> Controller -> @Transactional Service -> PostgreSQL
                                                        -> outbox_events
-outbox_events -> OutboxPublisher -> RabbitMQ topic exchange
+outbox_events -> OutboxPublisher -> RabbitMQ events exchange
                                   -> history queue -> order_event_history
                                   -> buyer queue   -> notifications
                                   -> seller queue  -> notifications
+                               -> RabbitMQ commands exchange
+                                  -> withdrawal queue -> WalletService
+                                  -> settlement queue -> OrderWorkflowService
 failed consumer message -> dead-letter exchange -> dead-letter queue
 ```
 
@@ -38,7 +41,11 @@ Thymeleaf templates render the current HTML interface. REST controllers and MVC 
 
 ### Messaging layer
 
-Services never publish directly to RabbitMQ. They save `MarketFlowEvent` records to `outbox_events` inside the same PostgreSQL transaction as the business change. `OutboxPublisher` sends `NEW` rows, waits for a correlated publisher confirm, marks acknowledged rows `PUBLISHED`, and retries failures with a delay. Consumers are idempotent by `eventId`. Retry exhaustion in a listener routes the rejected message to the shared DLQ.
+Services never publish directly to RabbitMQ. They save `MarketFlowEvent` facts or `MarketFlowCommand` requests to `outbox_events` inside the same PostgreSQL transaction as the business change. `OutboxPublisher` routes events to `marketflow.events.exchange` and commands to `marketflow.commands.exchange`, waits for a correlated publisher confirm, marks acknowledged rows `PUBLISHED`, and retries failures with a delay. Event consumers are idempotent by `eventId`; money consumers additionally lock the target transaction or seller-order part and treat an already completed state as a safe duplicate. Retry exhaustion in a listener routes the rejected message to the shared DLQ.
+
+### Cache layer
+
+Spring Cache stores the available product list and individual catalogue products in Redis for 60 seconds. Product changes, successful payments and refunds evict both caches. Cached data is never used as the source of truth for stock or money; all critical checks still read and update PostgreSQL.
 
 ## Important domain rules
 
@@ -59,7 +66,7 @@ Services never publish directly to RabbitMQ. They save `MarketFlowEvent` records
 
 1. Keep the synchronous multi-seller order path stable.
 2. Keep RabbitMQ event contracts backward compatible as new consumers appear.
-3. Add Redis only when catalogue caching has measurable benefit.
+3. Measure catalogue cache hit rate before expanding Redis usage.
 4. Add CI and container packaging.
 
 ## Diagrams
