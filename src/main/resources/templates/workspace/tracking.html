@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{workspace/fragments :: head('Доставка заказа')}"></head>
-<body><nav th:replace="~{workspace/fragments :: nav}"></nav>
+<body><nav th:replace="~{workspace/fragments :: buyerNav}"></nav>
 <main class="workspace"><h1>Доставка заказа</h1>
 <p><a th:href="@{/account/orders/{id}(id=${order.id})}">← Состав заказа и оплата</a></p>
 <div class="panel"><h2 th:text="${'Заказ #' + order.id}"></h2><p><span th:text="${order.status}"></span> · Оплата: <span th:text="${order.paymentStatus}"></span> · <b th:text="${order.totalPrice + ' ₽'}"></b></p>

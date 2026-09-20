@@ -4,7 +4,7 @@
 <title th:text="${title + ' | MarketFlow'}">MarketFlow</title><link rel="stylesheet" th:href="@{/css/workspace.css}">
 <script th:src="@{/js/notifications.js}" defer></script></head>
 <body>
-<nav th:fragment="nav" class="nav"><a th:href="@{/Buyer/account}" class="brand">MarketFlow</a><a th:href="@{/account/catalog}">Каталог</a>
+<nav th:fragment="buyerNav" class="nav"><a th:href="@{/Buyer/account}" class="brand">MarketFlow</a><a th:href="@{/account/catalog}">Каталог</a>
 <a th:href="@{/account/orders}">Мои заказы</a>
 <a class="notification-link" th:href="@{/notifications}">🔔 Уведомления <span class="notification-count" data-unread-count hidden>0</span></a>
 <a th:if="${isSeller}" th:href="@{/seller/account}">Кабинет продавца</a>
