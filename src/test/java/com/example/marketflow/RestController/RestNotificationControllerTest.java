@@ -59,6 +59,17 @@ class RestNotificationControllerTest {
     }
 
     @Test
+    void returnsUnreadCountForCurrentUser() throws Exception {
+        when(notificationService.countUnread(7L)).thenReturn(3L);
+
+        mockMvc.perform(get("/api/v1/notifications/unread-count").session(session(7L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(3));
+
+        verify(notificationService).countUnread(7L);
+    }
+
+    @Test
     void requiresSession() throws Exception {
         mockMvc.perform(get("/api/v1/notifications"))
                 .andExpect(status().isUnauthorized());

@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: MarketFlow Notifications API
-  version: 0.1.0
+  version: 0.2.0
   description: Асинхронные уведомления текущего покупателя или продавца.
 
 servers:
@@ -28,6 +28,17 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/NotificationPage' }
+        '401': { description: Требуется вход }
+
+  /api/v1/notifications/unread-count:
+    get:
+      summary: Получить количество непрочитанных уведомлений
+      responses:
+        '200':
+          description: Количество непрочитанных уведомлений текущего пользователя
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UnreadCount' }
         '401': { description: Требуется вход }
 
   /api/v1/notifications/{id}/read:
@@ -76,3 +87,8 @@ components:
         size: { type: integer }
         totalElements: { type: integer, format: int64 }
         totalPages: { type: integer }
+    UnreadCount:
+      type: object
+      required: [count]
+      properties:
+        count: { type: integer, format: int64, minimum: 0 }

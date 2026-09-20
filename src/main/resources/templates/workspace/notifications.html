@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{workspace/fragments :: head('Уведомления')}"></head>
+<body>
+<nav th:replace="~{workspace/fragments :: nav}"></nav>
+<main class="workspace">
+    <h1>Уведомления</h1>
+
+    <section class="notification-list" aria-label="Список уведомлений">
+        <article class="notification-item"
+                 th:each="notification : ${notifications.content}"
+                 th:classappend="${notification.read} ? ' notification-read' : ' notification-unread'">
+            <div class="notification-content">
+                <div class="notification-heading">
+                    <h2 th:text="${notification.title}">Заголовок уведомления</h2>
+                    <span class="badge"
+                          th:text="${notification.read} ? 'Прочитано' : 'Новое'">Новое</span>
+                </div>
+                <p th:text="${notification.message}">Текст уведомления</p>
+                <time class="muted" th:text="${notification.createdAt}">Время события</time>
+            </div>
+            <form th:if="${!notification.read}"
+                  th:action="@{/notifications/{id}/read(id=${notification.id},page=${notifications.page})}"
+                  method="post">
+                <button class="secondary" type="submit">Отметить прочитанным</button>
+            </form>
+        </article>
+
+        <div class="panel" th:if="${notifications.content.isEmpty()}">
+            <h2>Уведомлений пока нет</h2>
+            <p class="muted">Они появятся здесь после обработки событий заказа.</p>
+        </div>
+    </section>
+
+    <div th:replace="~{workspace/fragments :: pager(${notifications}, '/notifications')}"></div>
+</main>
+</body>
+</html>

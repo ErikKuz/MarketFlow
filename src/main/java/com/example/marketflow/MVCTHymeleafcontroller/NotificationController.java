@@ -1,46 +1,47 @@
-package com.example.marketflow.RestController;
+package com.example.marketflow.MVCTHymeleafcontroller;
 
-import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
 
 import com.example.marketflow.exception.AuthenticationRequiredException;
 import com.example.marketflow.marketplace.MarketplaceViews.PageView;
 import com.example.marketflow.service.NotificationService;
-import com.example.marketflow.service.NotificationService.NotificationView;
 
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 
-@RestController
-@RequestMapping("/api/v1/notifications")
+@Controller
+@RequestMapping("/notifications")
 @RequiredArgsConstructor
-public class RestNotificationController {
+public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping
-    public PageView<NotificationView> notifications(
+    public String notifications(
             HttpSession session,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            Model model,
+            @RequestParam(defaultValue = "0") int page
     ) {
-        return PageView.of(notificationService.findForUser(actor(session), page, size));
-    }
-
-    @GetMapping("/unread-count")
-    public UnreadCountView unreadCount(HttpSession session) {
-        return new UnreadCountView(notificationService.countUnread(actor(session)));
+        model.addAttribute(
+                "notifications",
+                PageView.of(notificationService.findForUser(actor(session), page, 20))
+        );
+        return "workspace/notifications";
     }
 
     @PostMapping("/{id}/read")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void markRead(@PathVariable Long id, HttpSession session) {
+    public String markRead(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page,
+            HttpSession session
+    ) {
         notificationService.markRead(actor(session), id);
+        return "redirect:/notifications?page=" + Math.max(page, 0);
     }
 
     private Long actor(HttpSession session) {
@@ -49,8 +50,5 @@ public class RestNotificationController {
             throw new AuthenticationRequiredException();
         }
         return userId;
-    }
-
-    public record UnreadCountView(long count) {
     }
 }

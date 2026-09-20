@@ -27,6 +27,11 @@ public class NotificationService {
         ).map(NotificationView::of);
     }
 
+    @Transactional(readOnly = true)
+    public long countUnread(Long userId) {
+        return notificationRepository.countByUserIdAndReadFalse(userId);
+    }
+
     @Transactional
     public void markRead(Long userId, Long notificationId) {
         notificationRepository.findByIdAndUserId(notificationId, userId)
