@@ -29,9 +29,11 @@ import com.example.marketflow.messaging.command.MarketFlowCommand.CommandType;
 import com.example.marketflow.messaging.outbox.OutboxService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class WalletService {
 
     private final WalletAccountRepository WAR;
@@ -82,6 +84,10 @@ public class WalletService {
                     && Objects.equals(transaction.getUserId(), sellerId)
                     && Objects.equals(transaction.getPaymentCardId(), cardId)
                     && transaction.getAmount().compareTo(amount) == 0) {
+                log.debug(
+                        "Existing withdrawal request returned: transactionId={}, sellerId={}, status={}",
+                        transaction.getId(), sellerId, transaction.getStatus()
+                );
                 return WithdrawalView.of(transaction);
             }
             throw new PaymentAlreadyProcessedException();
@@ -101,6 +107,10 @@ public class WalletService {
                     && Objects.equals(transaction.getUserId(), sellerId)
                     && Objects.equals(transaction.getPaymentCardId(), cardId)
                     && transaction.getAmount().compareTo(amount) == 0) {
+                log.debug(
+                        "Existing withdrawal request returned after wallet lock: transactionId={}, sellerId={}, status={}",
+                        transaction.getId(), sellerId, transaction.getStatus()
+                );
                 return WithdrawalView.of(transaction);
             }
             throw new PaymentAlreadyProcessedException();
@@ -127,6 +137,10 @@ public class WalletService {
         outboxService.saveCommand(MarketFlowCommand.withdrawal(
                 transaction.getId(), sellerId, cardId, amount, Instant.now()
         ), RabbitMqNames.REQUEST_SELLER_WITHDRAWAL_COMMAND);
+        log.info(
+                "Withdrawal request queued: transactionId={}, sellerId={}, amount={}, status={}",
+                transaction.getId(), sellerId, amount, transaction.getStatus()
+        );
         return WithdrawalView.of(transaction);
     }
 
@@ -152,6 +166,10 @@ public class WalletService {
                 .orElseThrow(() -> MarketplaceException.missing("Транзакция вывода не найдена"));
         if (transaction.getStatus() == TransactionStatus.COMPLETED
                 || transaction.getStatus() == TransactionStatus.FAILED) {
+            log.debug(
+                    "Withdrawal command ignored because transaction is final: commandId={}, transactionId={}, status={}",
+                    command.commandId(), transaction.getId(), transaction.getStatus()
+            );
             return;
         }
         if (transaction.getType() != TransactionType.SELLER_TRANSFERMONEYFROMMAINWALLET
@@ -170,6 +188,10 @@ public class WalletService {
         if (card.isEmpty()) {
             wallet.cancelReservedWithdrawal(command.amount());
             transaction.markFailed();
+            log.warn(
+                    "Withdrawal failed because seller card is unavailable: commandId={}, transactionId={}, sellerId={}",
+                    command.commandId(), transaction.getId(), command.sellerId()
+            );
             return;
         }
 
@@ -187,6 +209,10 @@ public class WalletService {
                 TransactionStatus.COMPLETED.name(),
                 Instant.now()
         ), RabbitMqNames.SELLER_WITHDRAWAL_COMPLETED_EVENT);
+        log.info(
+                "Withdrawal completed: commandId={}, transactionId={}, sellerId={}, amount={}",
+                command.commandId(), transaction.getId(), command.sellerId(), command.amount()
+        );
     }
 
     @Transactional
@@ -198,6 +224,10 @@ public class WalletService {
                 .orElseThrow(() -> MarketplaceException.missing("Транзакция вывода не найдена"));
         if (transaction.getStatus() == TransactionStatus.COMPLETED
                 || transaction.getStatus() == TransactionStatus.FAILED) {
+            log.debug(
+                    "Withdrawal cancellation ignored because transaction is final: commandId={}, transactionId={}, status={}",
+                    command.commandId(), transaction.getId(), transaction.getStatus()
+            );
             return;
         }
         if (transaction.getType() != TransactionType.SELLER_TRANSFERMONEYFROMMAINWALLET
@@ -213,6 +243,10 @@ public class WalletService {
         }
         wallet.cancelReservedWithdrawal(command.amount());
         transaction.markFailed();
+        log.warn(
+                "Withdrawal cancelled after permanent outbox failure: commandId={}, transactionId={}, sellerId={}",
+                command.commandId(), transaction.getId(), command.sellerId()
+        );
     }
 
     private void validateRequest(

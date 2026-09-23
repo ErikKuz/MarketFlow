@@ -21,10 +21,12 @@ import com.example.marketflow.messaging.command.MarketFlowCommand;
 import com.example.marketflow.service.WalletService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import tools.jackson.databind.ObjectMapper;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 @ConditionalOnProperty(name = "marketflow.outbox.enabled", havingValue = "true", matchIfMissing = true)
 public class OutboxPublisher {
     private final OutboxEventRepository outboxRepository;
@@ -82,6 +84,17 @@ public class OutboxPublisher {
                 );
             }
             entity.markPublished(clock.instant());
+            if (command) {
+                log.info(
+                        "RabbitMQ command published: eventId={}, routingKey={}, aggregateId={}",
+                        entity.getEventId(), entity.getRoutingKey(), entity.getAggregateId()
+                );
+            } else {
+                log.debug(
+                        "RabbitMQ event published: eventId={}, routingKey={}, aggregateId={}",
+                        entity.getEventId(), entity.getRoutingKey(), entity.getAggregateId()
+                );
+            }
         } catch (Exception exception) {
             long delaySeconds = Math.min(60, 1L << Math.min(entity.getAttempts(), 6));
             entity.registerFailure(
@@ -89,6 +102,19 @@ public class OutboxPublisher {
                     now.plusSeconds(delaySeconds),
                     maxAttempts
             );
+            if (entity.getStatus() == OutboxStatus.FAILED) {
+                log.error(
+                        "Outbox publication permanently failed: eventId={}, routingKey={}, attempts={}",
+                        entity.getEventId(), entity.getRoutingKey(), entity.getAttempts(), exception
+                );
+            } else {
+                log.warn(
+                        "Outbox publication failed, retry scheduled: eventId={}, routingKey={}, "
+                                + "attempt={}/{}, retryInSeconds={}, cause={}",
+                        entity.getEventId(), entity.getRoutingKey(), entity.getAttempts(), maxAttempts,
+                        delaySeconds, exception.getMessage()
+                );
+            }
             cancelWithdrawalIfPublishingPermanentlyFailed(entity);
         }
     }

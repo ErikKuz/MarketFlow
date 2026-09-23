@@ -39,9 +39,11 @@ import com.example.marketflow.messaging.command.MarketFlowCommand.CommandType;
 import com.example.marketflow.messaging.outbox.OutboxService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderWorkflowService {
     private final SellerOrderRepository SOR;
     private final OrderRepository OR;
@@ -143,6 +145,10 @@ public class OrderWorkflowService {
                 eventType, routingKey, order, part, null,
                 previousPartStatus.name(), next.name()
         );
+        log.info(
+                "Seller order status changed: orderId={}, sellerOrderId={}, sellerId={}, status={} -> {}",
+                order.getId(), part.getId(), sellerId, previousPartStatus, next
+        );
     }
 
     private void CheckSELLERSENDWORKANDSEND(OrderEntity order) {
@@ -188,6 +194,10 @@ public class OrderWorkflowService {
                 previousPartStatus.name(),
                 OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT.name()
         );
+        log.info(
+                "Buyer confirmed product receipt: orderId={}, sellerOrderId={}, buyerId={}, sellerId={}",
+                orderId, partId, buyerId, part.getSellerId()
+        );
         CheckSELLERSENDWORKANDSEND(order);
         if (SOR.findAllByOrderIdOrderBySellerId(orderId).stream()
                 .allMatch(p -> p.getStatus() == OBSERFFORSENDBYSELLERPRODUCTSTATUS.USERGETPRODUCT)) {
@@ -196,13 +206,18 @@ public class OrderWorkflowService {
     }
 
     private void queueSellerFundsRelease(OrderEntity order, SellerOrderEntity part) {
-        outboxService.saveCommand(MarketFlowCommand.releaseSellerFunds(
+        MarketFlowCommand command = MarketFlowCommand.releaseSellerFunds(
                 order.getId(),
                 part.getId(),
                 part.getSellerId(),
                 part.getSellerAmount(),
                 clock.instant()
-        ), RabbitMqNames.RELEASE_SELLER_FUNDS_COMMAND);
+        );
+        outboxService.saveCommand(command, RabbitMqNames.RELEASE_SELLER_FUNDS_COMMAND);
+        log.info(
+                "Seller funds release queued: commandId={}, orderId={}, sellerOrderId={}, sellerId={}",
+                command.commandId(), order.getId(), part.getId(), part.getSellerId()
+        );
     }
 
     @Transactional
@@ -221,9 +236,17 @@ public class OrderWorkflowService {
             throw new InvalidOrderStateException("Команда освобождения не соответствует части заказа");
         }
         if (part.getSettlementStatus() == OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.RETURNMONEY) {
+            log.debug(
+                    "Funds release ignored because settlement was reversed: commandId={}, sellerOrderId={}",
+                    command.commandId(), command.sellerOrderId()
+            );
             return;
         }
         if (part.getSettlementStatus() == OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET) {
+            log.debug(
+                    "Funds release ignored because settlement is already available: commandId={}, sellerOrderId={}",
+                    command.commandId(), command.sellerOrderId()
+            );
             completeOrderWhenAllFundsReleased(order);
             return;
         }
@@ -241,6 +264,10 @@ public class OrderWorkflowService {
                 part.getSellerAmount(),
                 OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.PENDINGWALLET.name(),
                 OBSERFFORSENDFROMUSERMONEYINSELLERSTATUS.MAINWALLET.name()
+        );
+        log.info(
+                "Seller funds released: commandId={}, orderId={}, sellerOrderId={}, sellerId={}, amount={}",
+                command.commandId(), command.orderId(), command.sellerOrderId(), command.sellerId(), command.amount()
         );
         completeOrderWhenAllFundsReleased(order);
     }
@@ -271,6 +298,7 @@ public class OrderWorkflowService {
                 previousOrderStatus.name(),
                 OrderStatus.COMPLETED.name()
         );
+        log.info("Order completed after all settlements: orderId={}", order.getId());
     }
 
     private void TrounseferMoneyFromPendingInMainWallet(SellerOrderEntity part) {

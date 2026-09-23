@@ -48,9 +48,11 @@ import com.example.marketflow.payment.WalletType;
 import com.example.marketflow.payment_cards.PaymentCardEntity;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentService {
     private final OrderRepository OR;
     private final PaymentCardRepository PCR;
@@ -77,6 +79,7 @@ public class PaymentService {
     @Transactional(noRollbackFor = InsufficientFundsException.class)
     @CacheEvict(cacheNames = {"catalogProducts", "catalogProduct"}, allEntries = true)
     public Long payOrder(Long orderId, Long buyerId, PayOrderRequest request) {
+        log.info("Order payment started: orderId={}, buyerId={}", orderId, buyerId);
         OrderEntity order = OR.findForPayment(orderId, buyerId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
         var checkonbegin = PTR.findByIdempotencyKey(request.idempotencyKey());
@@ -87,8 +90,20 @@ public class PaymentService {
                     || !Objects.equals(entity.getPaymentCardId(), request.cardId())) {
                 throw new PaymentAlreadyProcessedException();
             }
-            if (entity.getStatus() == TransactionStatus.COMPLETED) return orderId;
-            if (entity.getStatus() == TransactionStatus.FAILED) throw new InsufficientFundsException();
+            if (entity.getStatus() == TransactionStatus.COMPLETED) {
+                log.debug(
+                        "Completed payment returned by idempotency key: orderId={}, transactionId={}",
+                        orderId, entity.getId()
+                );
+                return orderId;
+            }
+            if (entity.getStatus() == TransactionStatus.FAILED) {
+                log.warn(
+                        "Previously failed payment requested again: orderId={}, transactionId={}",
+                        orderId, entity.getId()
+                );
+                throw new InsufficientFundsException();
+            }
             throw new PaymentAlreadyProcessedException();
         }
         if (order.getStatus() != OrderStatus.CREATED
@@ -101,7 +116,11 @@ public class PaymentService {
         order.changePaymentStatus(PaymentStatus.PROCESSING);
         if (card.getBalance().compareTo(order.getTotalPrice()) < 0) {
             order.changePaymentStatus(PaymentStatus.FAILED);
-            savePayment(order, request, TransactionStatus.FAILED);
+            PaymentTransactionEntity failedPayment = savePayment(order, request, TransactionStatus.FAILED);
+            log.warn(
+                    "Order payment failed because of insufficient funds: orderId={}, buyerId={}, transactionId={}",
+                    orderId, buyerId, failedPayment == null ? null : failedPayment.getId()
+            );
             throw new InsufficientFundsException();
         }
         var items = OIR.findAllByOrderId(orderId).stream()
@@ -115,7 +134,7 @@ public class PaymentService {
         }
         // Заблокированная управляемая сущность карты сохраняется в одной транзакции с остатками и оплатой.
         card.debit(order.getTotalPrice());//уменьшали деньги с карты покупателя
-        savePayment(order, request, TransactionStatus.COMPLETED);
+        PaymentTransactionEntity payment = savePayment(order, request, TransactionStatus.COMPLETED);
         order.changePaymentStatus(PaymentStatus.PAID);
         order.changeStatus(OrderStatus.CONFIRMED);
         saveEvent(
@@ -129,17 +148,23 @@ public class PaymentService {
                 PaymentStatus.PAID.name()
         );
         divideBetweenSellerAndPlatform(order);//раздали по продавцам
+        log.info(
+                "Order payment completed: orderId={}, buyerId={}, transactionId={}, amount={}",
+                orderId, buyerId, payment.getId(), order.getTotalPrice()
+        );
         return orderId;
     }
 
     @Transactional
     @CacheEvict(cacheNames = {"catalogProducts", "catalogProduct"}, allEntries = true)
     public void refundOrder(Long orderId, Long buyerId) {//отменяет оплаченный заказ
+        log.info("Order refund started: orderId={}, buyerId={}", orderId, buyerId);
         OrderEntity order = OR.findForPayment(orderId, buyerId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
 
         if (order.getStatus() == OrderStatus.CANCELLED
                 && order.getPaymentStatus() == PaymentStatus.REFUNDED) {
+            log.debug("Completed refund ignored as duplicate: orderId={}, buyerId={}", orderId, buyerId);
             return;
         }
         boolean refundableOrderState = order.getStatus() == OrderStatus.CONFIRMED
@@ -210,6 +235,10 @@ public class PaymentService {
                 order.getTotalPrice(),
                 PaymentStatus.PAID.name(),
                 PaymentStatus.REFUNDED.name()
+        );
+        log.info(
+                "Order refund completed: orderId={}, buyerId={}, paymentTransactionId={}, amount={}",
+                orderId, buyerId, payment.getId(), order.getTotalPrice()
         );
     }
 
