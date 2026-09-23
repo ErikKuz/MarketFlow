@@ -1,17 +1,18 @@
 package com.example.marketflow.config;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.cache.Cache;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Configuration;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Configuration
 @EnableCaching
-public class RedisCacheConfig implements CachingConfigurer {
-    private static final Logger log = LoggerFactory.getLogger(RedisCacheConfig.class);
+public class RedisCacheErrorHandlingConfig implements CachingConfigurer {
+
 
     @Override
     public CacheErrorHandler errorHandler() {

@@ -14,7 +14,7 @@ class RedisCacheConfigTest {
         Cache cache = mock(Cache.class);
         when(cache.getName()).thenReturn("catalogProducts");
         RuntimeException redisUnavailable = new RuntimeException("Redis unavailable");
-        var handler = new RedisCacheConfig().errorHandler();
+        var handler = new RedisCacheErrorHandlingConfig().errorHandler();
 
         assertDoesNotThrow(() -> handler.handleCacheGetError(redisUnavailable, cache, "all"));
         assertDoesNotThrow(() -> handler.handleCachePutError(redisUnavailable, cache, "all", "value"));
