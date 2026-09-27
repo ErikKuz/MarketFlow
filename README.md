@@ -8,7 +8,7 @@ MarketFlow is a learning multi-vendor marketplace built with Java and Spring Boo
 catalogue → cart → order → simulated payment → seller fulfillment → receipt
 ```
 
-An order may contain products from multiple sellers. Each seller gets a separate fulfillment part and can only process their own products. The overall order becomes `COMPLETED` after the buyer receives every part.
+An order may contain products from multiple sellers. Each seller gets a separate fulfillment part and can only process their own products. The overall order becomes `COMPLETED` after the buyer receives every part and their pending funds are released.
 
 ## Implemented scope
 
@@ -39,7 +39,7 @@ Seller applications, moderation, analytics, returns after receipt and automatic 
 
 Java 21, Spring Boot 4, Spring MVC, Thymeleaf, Spring Security, Spring Data JPA, Hibernate, PostgreSQL, Flyway, RabbitMQ, Redis, OpenAPI, Maven, JUnit 5, Mockito, MockMvc and Testcontainers.
 
-Redis is used only as a temporary cache for the available catalogue and individual product views. PostgreSQL remains the source of truth. Entries expire after 60 seconds and both caches are cleared after a product change, successful payment or refund.
+Redis provides a temporary cache for the available catalogue and individual product views. PostgreSQL remains the source of truth. Entries expire after 60 seconds and both caches are cleared after a product change, successful payment or refund. Optional Redis-backed limits apply to REST API requests: `RATE_LIMIT_ENABLED=true` enables a fixed window, and `DYNAMIC_RATE_LIMIT_ENABLED=true` enables a sliding window. Both are disabled by default and can be enabled independently.
 
 ## Main tables
 

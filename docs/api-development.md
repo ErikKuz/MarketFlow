@@ -2,19 +2,14 @@
 
 ## Current state
 
-MarketFlow currently exposes a server-rendered Spring MVC interface. The REST API is planned but is not yet part of the public contract. This document defines how the REST boundary should be introduced without duplicating business logic.
+MarketFlow exposes both Spring MVC pages and a REST API under `/api/v1`. The REST contracts are split by feature across the YAML files in `openapi/`. MVC and REST controllers call the same application services.
 
 ## Contract-first workflow
 
-1. Describe one complete use case in `openapi/marketflow-api.yaml`.
-2. Validate the document with Swagger Editor and an automated build check.
-3. Review paths, schemas, status codes, and error responses before implementation.
-4. Generate Spring API interfaces and transport DTOs with OpenAPI Generator.
-5. Implement the generated interfaces in controllers.
-6. Keep business rules in application services rather than generated code.
-7. Publish the contract and Swagger UI through the application.
-
-Generated files must not be edited manually. Contract changes start in the OpenAPI document and generated sources are replaced during the build.
+1. Update the relevant contract in `openapi/` when an endpoint changes.
+2. Review paths, schemas, status codes, and error responses against the controller.
+3. Keep business rules in application services rather than duplicating them in controllers.
+4. Run `./mvnw test` (or `.\mvnw.cmd test` on Windows) before committing.
 
 ## URL conventions
 
@@ -53,13 +48,6 @@ All REST errors should use one stable schema containing at least:
 
 Validation failures may additionally contain field-level errors.
 
-## Initial API slice
+## Implemented areas
 
-The first contract should remain small and cover catalogue reads:
-
-```http
-GET /api/v1/products
-GET /api/v1/products/{productId}
-```
-
-This slice is read-only, easy to verify, and reuses the existing product service. Order and payment operations should be added only after their domain workflows are stable.
+The contracts cover authentication, catalogue and seller products, cart, checkout, orders, simulated payments, wallets, and notifications. See the individual files in `openapi/` for current request and response details.
