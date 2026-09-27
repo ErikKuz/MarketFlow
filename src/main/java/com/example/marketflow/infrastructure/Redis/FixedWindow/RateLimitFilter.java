@@ -1,11 +1,12 @@
-package com.example.marketflow.infrastructure.Redis;
+package com.example.marketflow.infrastructure.Redis.FixedWindow;
 
 import java.io.IOException;
 import java.util.Optional;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -17,14 +18,17 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Component 
+@ConditionalOnProperty(name = "rate-limit.enabled", havingValue = "true")
 @Slf4j 
 @RequiredArgsConstructor 
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class RateLimitFilter extends OncePerRequestFilter {
     private final FixedWindowRateLimiter fixedWindowRateLimiter;
 
-    @Value("${rate-limit.enabled}")
-    private boolean enableRatelimiting;
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return !request.getRequestURI().startsWith(request.getContextPath() + "/api/v1/");
+    }
 
     @Override
     protected void doFilterInternal(
@@ -33,16 +37,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        if (!enableRatelimiting) {
+        String client = Optional.ofNullable(req.getRemoteAddr()).orElse("unknown");
+        boolean allowed;
+        try {
+            allowed = fixedWindowRateLimiter.checkonratelimit(client);
+        } catch (DataAccessException exception) {
+            log.warn("Redis недоступен, проверка лимита запросов пропущена: {}", exception.toString());
             filterChain.doFilter(req, response);
             return;
         }
-
-        String client = Optional.ofNullable(req.getHeader("X-API-KEY"))
-                .filter(s -> !s.isBlank())
-                .orElseGet(() -> Optional.ofNullable(req.getRemoteAddr()).orElse("unknown"));
-
-        boolean allowed = fixedWindowRateLimiter.checkonratelimit(client);
 
         if (!allowed) {
             response.setStatus(429);

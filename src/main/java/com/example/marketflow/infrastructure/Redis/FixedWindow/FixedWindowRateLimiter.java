@@ -1,4 +1,4 @@
-package com.example.marketflow.infrastructure.Redis;
+package com.example.marketflow.infrastructure.Redis.FixedWindow;
 
 import java.time.Duration;
 
@@ -14,7 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 public class FixedWindowRateLimiter {
     private static final long maxcount = 10;
     private static final Duration windowDuration = Duration.ofMinutes(1);
-    StringRedisTemplate stringRedistemplate;
+    private final StringRedisTemplate stringRedistemplate;
     
     public boolean checkonratelimit(String clientId){
         
