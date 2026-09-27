@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import com.example.marketflow.marketplace.MarketplaceException;
+
 import jakarta.servlet.http.HttpServletRequest;
 
 
@@ -25,9 +27,17 @@ import jakarta.servlet.http.HttpServletRequest;
 public class GlobalRestExceptionHandler {
     @ExceptionHandler(com.example.marketflow.marketplace.MarketplaceException.class)
     public ResponseEntity<ApiError> handleMarketplace(
-            com.example.marketflow.marketplace.MarketplaceException e, HttpServletRequest request) {
-        return ResponseEntity.status(e.getStatus()).body(new ApiError(Instant.now(), e.getStatus().value(),
-                e.getCode(), e.getMessage(), request.getRequestURI(), List.of(), null));
+            MarketplaceException exception, HttpServletRequest request) {
+        ApiError error = new ApiError(
+                Instant.now(),
+                exception.getStatus().value(),
+                exception.getCode(),
+                exception.getMessage(),
+                request.getRequestURI(),
+                List.of(),
+                null
+        );
+        return ResponseEntity.status(exception.getStatus()).body(error);
     }
     @ExceptionHandler(ProductNotFoundException.class)
     public ResponseEntity<ApiError> handleProductNotFoundException(ProductNotFoundException exception,
