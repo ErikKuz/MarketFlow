@@ -1,6 +1,7 @@
 package com.example.marketflow.MVCTHymeleafcontroller;
 
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -32,7 +33,7 @@ class PaymentCardControllerTest {
     void showsCardListWithSuccessMessageAfterRedirect() throws Exception {
         when(paymentCardService.getUserPaymentCards(7L)).thenReturn(List.of());
 
-        mockMvc.perform(get("/account/account/cards")
+        mockMvc.perform(get("/account/cards")
                         .session(session())
                         .param("added", "true"))
                 .andExpect(status().isOk())
@@ -42,18 +43,32 @@ class PaymentCardControllerTest {
 
     @Test
     void addsCardUsingPostRedirectGet() throws Exception {
-        mockMvc.perform(post("/account/account/cards")
+        mockMvc.perform(post("/account/cards")
                         .session(session())
                         .param("cardtoken", "card_test")
                         .param("maskedNumber", "**** 1234")
                         .param("balance", "100.00"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/account/account/cards?added=true"));
+                .andExpect(redirectedUrl("/account/cards?added=true"));
 
         verify(paymentCardService).addPaymentCard(
                 org.mockito.ArgumentMatchers.eq(7L),
                 org.mockito.ArgumentMatchers.any(AddPaymentCardRequest.class)
         );
+    }
+
+    @Test
+    void rejectsInvalidBalanceBeforeSaving() throws Exception {
+        mockMvc.perform(post("/account/cards")
+                        .session(session())
+                        .param("cardtoken", "card_test")
+                        .param("maskedNumber", "**** 1234")
+                        .param("balance", "-1.00"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("addCardForm"))
+                .andExpect(model().attributeExists("cardError"));
+
+        verifyNoInteractions(paymentCardService);
     }
 
     private MockHttpSession session() {

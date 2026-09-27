@@ -7,7 +7,7 @@
 <nav th:fragment="buyerNav" class="nav"><a th:href="@{/Buyer/account}" class="brand">MarketFlow</a><a th:href="@{/account/catalog}">Каталог</a>
 <a th:href="@{/account/cart}">Корзина</a>
 <a th:href="@{/account/orders}">Мои заказы</a>
-<a th:href="@{/account/account/cards}">Карты</a>
+<a th:href="@{/account/cards}">Карты</a>
 <a class="notification-link" th:href="@{/notifications}">🔔 Уведомления <span class="notification-count" data-unread-count hidden>0</span></a>
 <a th:if="${isSeller}" th:href="@{/seller/account}">Кабинет продавца</a>
 <a th:href="@{/Buyer/account}">Личный кабинет</a>
@@ -26,7 +26,7 @@
 <a th:href="@{/account/catalog}" th:attr="aria-current=${active == 'catalog' ? 'page' : null}">Каталог</a>
 <a th:href="@{/account/cart}" th:attr="aria-current=${active == 'cart' ? 'page' : null}">Корзина</a>
 <a th:href="@{/account/orders}" th:attr="aria-current=${active == 'orders' ? 'page' : null}">Мои заказы</a>
-<a th:href="@{/account/account/cards}" th:attr="aria-current=${active == 'cards' ? 'page' : null}">Карты</a>
+<a th:href="@{/account/cards}" th:attr="aria-current=${active == 'cards' ? 'page' : null}">Карты</a>
 <a class="notification-link" th:href="@{/notifications}">🔔 Уведомления <span class="notification-count" data-unread-count hidden>0</span></a>
 <a th:if="${isSeller}" th:href="@{/seller/account}">Кабинет продавца</a>
 <a th:href="@{/Buyer/account}" th:attr="aria-current=${active == 'profile' ? 'page' : null}">Профиль</a>

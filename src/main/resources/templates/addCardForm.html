@@ -14,10 +14,11 @@
         <p class="eyebrow">Новый способ оплаты</p>
         <h1>Добавить карту</h1>
         <p class="muted">Заполните реквизиты учебного платёжного счёта.</p>
+        <p class="field-error" th:if="${cardError}" th:text="${cardError}"></p>
 
         <form class="market-form"
-              th:action="@{/account/account/cards}"
-              action="/account/account/cards"
+              th:action="@{/account/cards}"
+              action="/account/cards"
               method="post">
 
             <div class="field">
@@ -55,7 +56,7 @@
 
             <div class="form-actions">
                 <button class="button button-primary" type="submit">Сохранить карту</button>
-                <a class="button button-secondary" th:href="@{/account/account/cards}" href="/account/account/cards">Отмена</a>
+                <a class="button button-secondary" th:href="@{/account/cards}" href="/account/cards">Отмена</a>
             </div>
         </form>
     </section>

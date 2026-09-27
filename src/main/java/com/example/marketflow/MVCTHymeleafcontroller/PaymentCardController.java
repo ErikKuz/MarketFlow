@@ -2,6 +2,7 @@ package com.example.marketflow.MVCTHymeleafcontroller;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,6 +13,7 @@ import com.example.marketflow.payment_cards.AddPaymentCardRequest;
 import com.example.marketflow.service.PaymentCardService;
 
 import jakarta.servlet.http.HttpSession;
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 
 @Controller
@@ -20,7 +22,7 @@ import lombok.AllArgsConstructor;
 public class PaymentCardController {
     private final PaymentCardService paymentCardService;
 
-    @GetMapping("/account/cards")
+    @GetMapping("/cards")
     public String ShowCardUser(
             Model model,
             HttpSession session,
@@ -36,9 +38,14 @@ public class PaymentCardController {
         return "addCardForm";
     }
 
-    @PostMapping("/account/cards")
-    public String AddCardUser(@ModelAttribute AddPaymentCardRequest dto,HttpSession session){
+    @PostMapping("/cards")
+    public String AddCardUser(@Valid @ModelAttribute AddPaymentCardRequest dto,
+                              BindingResult bindingResult, HttpSession session, Model model){
+        if (bindingResult.hasErrors()) {
+            model.addAttribute("cardError", "Проверьте реквизиты карты и баланс.");
+            return "addCardForm";
+        }
         paymentCardService.addPaymentCard((Long)session.getAttribute("userId"),dto);
-        return "redirect:/account/account/cards?added=true";
+        return "redirect:/account/cards?added=true";
     }
 }
