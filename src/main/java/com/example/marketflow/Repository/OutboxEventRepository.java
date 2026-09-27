@@ -7,11 +7,15 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 
 import com.example.marketflow.messaging.outbox.OutboxEventEntity;
 import com.example.marketflow.messaging.outbox.OutboxStatus;
 
+import jakarta.persistence.LockModeType;
+
 public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, Long> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<OutboxEventEntity> findByStatusAndAvailableAtLessThanEqualOrderByCreatedAtAscIdAsc(
             OutboxStatus status,
             Instant availableAt,

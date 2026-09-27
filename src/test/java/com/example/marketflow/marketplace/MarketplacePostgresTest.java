@@ -413,6 +413,8 @@ class MarketplacePostgresTest {
                 .andExpect(status().isNotFound());
         mvc.perform(post("/api/v1/orders/{id}/fulfillments/{partId}/receive", f.order, f.part).with(user(buyer)).with(csrf()))
                 .andExpect(status().isNoContent());
+        assertEquals(OrderStatus.SELLERSENDWORKANDSEND, orders.findById(f.order).orElseThrow().getStatus());
+        release(f.order, f.part);
         assertEquals(OrderStatus.COMPLETED, orders.findById(f.order).orElseThrow().getStatus());
         mvc.perform(get("/api/v1/orders").with(user(buyer)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(f.order));

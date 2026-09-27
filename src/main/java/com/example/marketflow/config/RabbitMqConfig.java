@@ -26,7 +26,10 @@ public class RabbitMqConfig {
 //Он автоматически создаёт и связывает exchange с q ,routing 
     @Bean
     public MessageConverter rabbitMessageConverter() {
-        return new JacksonJsonMessageConverter();
+        return new JacksonJsonMessageConverter(
+                "com.example.marketflow.messaging",
+                "com.example.marketflow.messaging.command"
+        );
     }
 
     @Bean
